@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+
+# User/private data files
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.parquet
+
+# Optional exported sessions/data
+*.json
