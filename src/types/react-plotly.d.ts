@@ -7,6 +7,7 @@ declare module 'react-plotly.js' {
     config?: Record<string, unknown>
     style?: Record<string, string | number>
     useResizeHandler?: boolean
+    revision?: number
     onClick?: (event: unknown) => void
     onSelected?: (event: unknown) => void
   }

@@ -7,7 +7,21 @@ import { getEffectiveValue, isMissing, toNumber } from '../utils/numeric'
 import { formatNumber, summarizeColumn } from '../utils/stats'
 
 export function InspectionTools() {
-  const { workbook, activeSheetName, selectedColumn, cellState, setPreviewCells } = useDataInspectorStore()
+  const {
+    workbook,
+    activeSheetName,
+    selectedColumn,
+    selectedCells,
+    previewCells,
+    cellState,
+    setPreviewCells,
+    setPlotType,
+    plotType,
+    markTargets,
+    clearTargetMarks,
+    clearSelection,
+    clearPreview,
+  } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [thresholdDirection, setThresholdDirection] = useState<'greater' | 'less'>('greater')
   const [rangeMin, setRangeMin] = useState('')
@@ -67,7 +81,13 @@ export function InspectionTools() {
       return
     }
 
-    setMessage('Distribution shown. This does not select, mark, or edit values.')
+    const nextPlotType = plotType === 'histogram' ? 'scatter' : 'histogram'
+    setPlotType(nextPlotType)
+    setMessage(
+      nextPlotType === 'histogram'
+        ? 'Distribution view shown. This does not select, mark, or edit values.'
+        : 'Scatter view shown. You can click or drag-select points again.',
+    )
   }
 
   function previewThreshold() {
@@ -114,7 +134,7 @@ export function InspectionTools() {
     const lowerFence = summary.q1 - 1.5 * summary.iqr
     const upperFence = summary.q3 + 1.5 * summary.iqr
 
-    buildPreview('Show unusual values', (value) =>
+    buildPreview('Outside typical range', (value) =>
       value !== null && (value < lowerFence || value > upperFence)
         ? `Outside IQR fence: lower=${formatNumber(lowerFence)}, upper=${formatNumber(upperFence)}`
         : null,
@@ -128,7 +148,7 @@ export function InspectionTools() {
       return
     }
 
-    buildPreview('Show z-score outliers', (value) => {
+    buildPreview('Far from average', (value) => {
       if (value === null || summary.mean === null || summary.standardDeviation === null) {
         return null
       }
@@ -143,13 +163,18 @@ export function InspectionTools() {
     )
   }
 
+  const selectedCount = Object.keys(selectedCells).length
+  const previewCount = Object.keys(previewCells).length
+  const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
+  const distributionLabel = plotType === 'histogram' ? 'Show scatter' : 'Show distribution'
+
   return (
     <section className="panel tools-panel">
       <div className="panel-title with-tip">
-        <span>Preview Tools</span>
+        <span>Find and Highlight Values</span>
         <InfoTip label="Preview finds possible values to inspect. It does not change your data." />
       </div>
-      <p className="hint tool-intro">Preview is temporary. Mark values when you want highlights to persist and export.</p>
+      <p className="hint tool-intro">Preview suggestions first, select the values you want, then apply a persistent highlight.</p>
       <div className="summary-grid">
         <span>Count</span>
         <strong>{summary?.count.toLocaleString() ?? '-'}</strong>
@@ -218,17 +243,17 @@ export function InspectionTools() {
             type="button"
             onClick={showUnusualValues}
             disabled={!sheet}
-            title="Uses the IQR method to find values far outside the middle range of the data."
+            title="Finds values far below or above the middle range of the data. Method: Q1 - 1.5 x IQR to Q3 + 1.5 x IQR."
           >
-            Unusual values
+            Outside typical range
           </button>
           <button
             type="button"
             onClick={showZScoreOutliers}
             disabled={!sheet}
-            title="Finds values far from the average. Works best when data are roughly bell-shaped."
+            title="Finds values unusually far from the column average. Method: z-score."
           >
-            Z-score outliers
+            Far from average
           </button>
           <button
             type="button"
@@ -242,9 +267,13 @@ export function InspectionTools() {
             type="button"
             onClick={showDistribution}
             disabled={!sheet}
-            title="Shows summary numbers only. It does not select, mark, or edit values."
+            title={
+              plotType === 'histogram'
+                ? 'Switches back to the scatter plot for selecting points.'
+                : 'Switches to a histogram view of the selected value column.'
+            }
           >
-            Show distribution
+            {distributionLabel}
           </button>
         </div>
         <div className="z-cutoff-row">
@@ -252,6 +281,65 @@ export function InspectionTools() {
             <span>Z cutoff</span>
             <input value={zCutoff} onChange={(event) => setZCutoff(event.target.value)} placeholder="3" />
           </label>
+        </div>
+      </div>
+
+      <div className="tool-block">
+        <div className="tool-block-title">
+          <span>Select values</span>
+          <InfoTip label="Selection is temporary. Select points on the chart or toggle rows in the table, then apply a highlight." />
+        </div>
+        <div className="compact-button-row">
+          <button type="button" onClick={clearSelection} disabled={selectedCount === 0}>
+            Clear selection
+          </button>
+          <button type="button" onClick={clearPreview} disabled={previewCount === 0}>
+            Clear preview
+          </button>
+        </div>
+      </div>
+
+      <div className="tool-block">
+        <div className="tool-block-title">
+          <span>Apply highlight</span>
+          <InfoTip label="Highlights are persistent review decisions. They stay visible until Remove highlight is used." />
+        </div>
+        <div className="mark-grid">
+          <button
+            type="button"
+            className="review-button"
+            onClick={() => markTargets('review')}
+            disabled={targetCount === 0}
+            title="Yellow highlight. Use for values you want to inspect later."
+          >
+            Flag for review
+          </button>
+          <button
+            type="button"
+            className="problem-button"
+            onClick={() => markTargets('problem')}
+            disabled={targetCount === 0}
+            title="Red highlight. Use for values that are likely incorrect."
+          >
+            Mark as problem
+          </button>
+          <button
+            type="button"
+            className="keep-button"
+            onClick={() => markTargets('keep')}
+            disabled={targetCount === 0}
+            title="Green highlight. Use for values you reviewed and decided to keep."
+          >
+            Mark as accepted
+          </button>
+          <button
+            type="button"
+            onClick={clearTargetMarks}
+            disabled={targetCount === 0}
+            title="Removes persistent highlight marks from selected or previewed cells. Raw values are not changed."
+          >
+            Remove highlight
+          </button>
         </div>
       </div>
       {message ? <p className="hint">{message}</p> : null}

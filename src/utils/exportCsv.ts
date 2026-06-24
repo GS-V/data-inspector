@@ -1,4 +1,5 @@
-import type { AuditAction, CellState, RawCellValue, SheetData } from '../types/data'
+import * as XLSX from 'xlsx'
+import type { AuditAction, CellState, RawCellValue, SheetData, WorkbookData } from '../types/data'
 import { makeCellId } from './cellId'
 import { getDisplayValue, getEffectiveValue } from './numeric'
 
@@ -32,62 +33,45 @@ export function buildCleanedCsv(
   return rowsToCsv(rows, sheet.columns)
 }
 
-export function buildMarkedCsv(
-  sheet: SheetData,
-  selectedColumn: string,
-  cellState: Record<string, CellState>,
-): string {
-  const markColumn = `${selectedColumn}__mark`
-  const noteColumn = `${selectedColumn}__note`
-  const markedCellsColumn = '__marked_cells'
-  const markSummaryColumn = '__mark_summary'
-  const blankedCellsColumn = '__blanked_cells'
-  const columns = [
-    ...sheet.columns,
-    markColumn,
-    noteColumn,
-    markedCellsColumn,
-    markSummaryColumn,
-    blankedCellsColumn,
-  ]
-  const rows = sheet.rows.map((row, rowIndex) => {
-    const markedRow: Record<string, RawCellValue> = {}
-    const markedCells: string[] = []
-    const summaryItems: string[] = []
-    const blankedCells: string[] = []
-
-    sheet.columns.forEach((column) => {
+function cleanedSheetRows(sheet: SheetData, cellState: Record<string, CellState>) {
+  return sheet.rows.map((row, rowIndex) =>
+    sheet.columns.map((column) => {
       const cellId = makeCellId(sheet.name, rowIndex, column)
-      const state = cellState[cellId]
-      markedRow[column] = getEffectiveValue(row[column], state)
+      const value = getEffectiveValue(row[column], cellState[cellId])
+      return value ?? ''
+    }),
+  )
+}
 
-      if (state?.mark || state?.valueOverride === null) {
-        const mark = state.valueOverride === null ? 'blanked' : (state.mark ?? 'changed')
-        markedCells.push(`${column}=${mark}`)
-        summaryItems.push(`${column} ${mark}`)
-      }
+function uniqueExcelSheetName(sheetName: string, usedNames: Set<string>) {
+  const baseName = (sheetName.trim() || 'Sheet').slice(0, 31)
+  let nextName = baseName
+  let suffix = 2
 
-      if (state?.valueOverride === null || state?.mark === 'blanked') {
-        blankedCells.push(column)
-        if (!summaryItems.includes(`${column} blanked`)) {
-          summaryItems.push(`${column} blanked`)
-        }
-      }
-    })
+  while (usedNames.has(nextName)) {
+    const suffixText = ` ${suffix}`
+    nextName = `${baseName.slice(0, 31 - suffixText.length)}${suffixText}`
+    suffix += 1
+  }
 
-    const inspectedCellId = makeCellId(sheet.name, rowIndex, selectedColumn)
-    markedRow[markColumn] = cellState[inspectedCellId]?.mark ?? ''
-    markedRow[noteColumn] = cellState[inspectedCellId]?.note ?? ''
-    markedRow[markedCellsColumn] = markedCells.join('; ')
-    markedRow[blankedCellsColumn] = blankedCells.join('; ')
-    markedRow[markSummaryColumn] =
-      summaryItems.length === 0
-        ? ''
-        : `${summaryItems.length} marked/blanked cell${summaryItems.length === 1 ? '' : 's'}: ${summaryItems.join('; ')}`
-    return markedRow
+  usedNames.add(nextName)
+  return nextName
+}
+
+export function downloadCleanedXlsxWorkbook(
+  fileName: string,
+  workbookData: WorkbookData,
+  cellState: Record<string, CellState>,
+) {
+  const workbook = XLSX.utils.book_new()
+  const usedSheetNames = new Set<string>()
+
+  workbookData.sheets.forEach((sheet) => {
+    const worksheet = XLSX.utils.aoa_to_sheet([sheet.columns, ...cleanedSheetRows(sheet, cellState)])
+    XLSX.utils.book_append_sheet(workbook, worksheet, uniqueExcelSheetName(sheet.name, usedSheetNames))
   })
 
-  return rowsToCsv(rows, columns)
+  XLSX.writeFile(workbook, fileName)
 }
 
 export function buildAuditLogCsv(auditLog: AuditAction[]): string {

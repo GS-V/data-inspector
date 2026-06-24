@@ -307,18 +307,36 @@ button:disabled {
 }
 
 .chart-panel {
-  min-height: 486px;
+  min-height: 592px;
   overflow: hidden;
 }
 
-.chart-tip {
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin: 10px 12px 0;
+}
+
+.chart-tip {
+  flex: 1 1 auto;
   padding: 7px 9px;
   border: 1px solid var(--accent-border);
   border-radius: 6px;
   color: var(--accent-text);
   background: var(--accent-soft);
   font-size: 12px;
+}
+
+.chart-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.chart-actions button {
+  min-height: 30px;
 }
 
 .empty-state {
@@ -469,7 +487,7 @@ button:disabled {
 }
 
 .table-wrap {
-  max-height: 280px;
+  max-height: 230px;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -500,6 +518,20 @@ th {
 
 td {
   color: var(--strong-text);
+}
+
+.selectable-row {
+  cursor: pointer;
+}
+
+.selectable-row:hover,
+.selectable-row:focus {
+  outline: none;
+  background: var(--accent-soft);
+}
+
+.selected-row {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
 }
 
 td:nth-child(7) {
@@ -581,6 +613,19 @@ td:nth-child(7) {
 
   .file-status {
     text-align: left;
+  }
+
+  .chart-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chart-actions {
+    width: 100%;
+  }
+
+  .chart-actions button {
+    flex: 1;
   }
 
   .threshold-row,

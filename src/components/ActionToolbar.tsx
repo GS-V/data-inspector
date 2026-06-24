@@ -3,9 +3,9 @@ import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { CellMark } from '../types/data'
 import { makeCellId } from '../utils/cellId'
-import { buildAuditLogCsv, buildCleanedCsv, downloadCsv } from '../utils/exportCsv'
+import { buildAuditLogCsv, buildCleanedCsv, downloadCleanedXlsxWorkbook, downloadCsv } from '../utils/exportCsv'
 
-type ExportType = 'cleaned-csv' | 'highlighted-xlsx' | 'audit-csv'
+type ExportType = 'cleaned-csv' | 'cleaned-xlsx' | 'highlighted-xlsx' | 'audit-csv'
 
 function fileStem(fileName: string | undefined): string {
   return (fileName ?? 'data-inspector').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-')
@@ -37,14 +37,8 @@ export function ActionToolbar() {
     previewCells,
     cellState,
     auditLog,
-    undoStack,
-    markTargets,
-    clearTargetMarks,
     blankSelectedTargets,
     blankMarkedInCurrentColumn,
-    undoLastActionGroup,
-    clearPreview,
-    clearSelection,
   } = useDataInspectorStore()
   const [exportType, setExportType] = useState<ExportType>('cleaned-csv')
 
@@ -94,9 +88,20 @@ export function ActionToolbar() {
     downloadCsv(`${fileStem(workbook?.fileName)}-audit-log.csv`, buildAuditLogCsv(auditLog))
   }
 
+  function exportCleanedXlsx() {
+    if (!workbook) {
+      return
+    }
+    downloadCleanedXlsxWorkbook(`${fileStem(workbook.fileName)}-cleaned.xlsx`, workbook, cellState)
+  }
+
   function handleExport() {
     if (exportType === 'cleaned-csv') {
       exportCleanedCsv()
+    }
+
+    if (exportType === 'cleaned-xlsx') {
+      exportCleanedXlsx()
     }
 
     if (exportType === 'audit-csv') {
@@ -106,10 +111,12 @@ export function ActionToolbar() {
 
   const isExportDisabled =
     (exportType === 'cleaned-csv' && !sheet) ||
+    (exportType === 'cleaned-xlsx' && !workbook) ||
     // The installed SheetJS xlsx writer does not reliably preserve cell fill styles.
     // A style-capable writer such as exceljs is needed before offering colored XLSX export.
     (exportType === 'highlighted-xlsx') ||
     (exportType === 'audit-csv' && auditLog.length === 0)
+  const isXlsxSource = workbook?.fileName.toLowerCase().endsWith('.xlsx') || workbook?.fileName.toLowerCase().endsWith('.xls')
 
   return (
     <aside className="panel action-panel">
@@ -122,75 +129,16 @@ export function ActionToolbar() {
           <CountChip label="Preview" value={Object.keys(previewCells).length} tone="preview" />
           <CountChip label="Review" value={sheetCounts.review} tone="review" />
           <CountChip label="Problem" value={sheetCounts.problem} tone="problem" />
-          <CountChip label="Keep" value={sheetCounts.keep} tone="keep" />
+          <CountChip label="Accepted" value={sheetCounts.keep} tone="keep" />
           <CountChip label="Blanked" value={sheetCounts.blanked} tone="blanked" />
         </div>
       </section>
 
       <section className="action-section">
-        <SectionHeader
-          title="Highlight"
-          help="Marks are persistent highlights. They are exported, unlike temporary selections and previews."
-        />
-        <div className="mark-grid">
-          <button
-            type="button"
-            className="review-button"
-            onClick={() => markTargets('review')}
-            disabled={targetCount === 0}
-            title="Yellow highlight. Use for values you want to inspect later."
-          >
-            Review
-          </button>
-          <button
-            type="button"
-            className="problem-button"
-            onClick={() => markTargets('problem')}
-            disabled={targetCount === 0}
-            title="Red highlight. Use for values that are likely incorrect."
-          >
-            Problem
-          </button>
-          <button
-            type="button"
-            className="keep-button"
-            onClick={() => markTargets('keep')}
-            disabled={targetCount === 0}
-            title="Green highlight. Use for values you reviewed and decided to keep."
-          >
-            Keep
-          </button>
-          <button
-            type="button"
-            onClick={clearTargetMarks}
-            disabled={targetCount === 0}
-            title="Removes persistent highlights from selected or previewed cells."
-          >
-            Clear
-          </button>
-        </div>
-        <p className="hint">Review = yellow, Problem = red, Keep = green.</p>
-      </section>
-
-      <section className="action-section">
-        <SectionHeader
-          title="Selection"
-          help="Click points to select them. Click again to unselect. Drag to select many points."
-        />
-        <div className="compact-button-row">
-          <button type="button" onClick={clearSelection} disabled={Object.keys(selectedCells).length === 0}>
-            Clear Selection
-          </button>
-          <button type="button" onClick={clearPreview} disabled={Object.keys(previewCells).length === 0}>
-            Clear Preview
-          </button>
-        </div>
-      </section>
-
-      <section className="action-section">
+        {/* TODO: Reintroduce grouped undo/redo after action history is stabilized. */}
         <SectionHeader
           title="Clean"
-          help="Blanking replaces values with empty cells. Rows are never deleted."
+          help="Blanking affects the cleaned export only. Raw data stays unchanged and rows are never deleted."
         />
         <div className="button-group">
           <button
@@ -198,33 +146,25 @@ export function ActionToolbar() {
             className="danger-soft"
             onClick={blankSelectedTargets}
             disabled={targetCount === 0}
-            title="Replaces selected or previewed values with blank. Rows are not deleted."
+            title="Selected or previewed values become blank in the cleaned export. Rows are not deleted."
           >
-            Blank Selected
+            Replace selected values with blank
           </button>
           <button
             type="button"
             onClick={() => blankMarkedInCurrentColumn('problem')}
             disabled={selectedColumnCounts.problem === 0}
-            title="Blanks all red Problem cells in the current sheet and selected column."
+            title="Replaces all red Problem cells in the current sheet and selected column with blank in the cleaned export."
           >
-            Blank all Problem
+            Replace Problem with blank
           </button>
           <button
             type="button"
             onClick={() => blankMarkedInCurrentColumn('review')}
             disabled={selectedColumnCounts.review === 0}
-            title="Blanks all yellow Review cells in the current sheet and selected column."
+            title="Replaces all yellow Review cells in the current sheet and selected column with blank in the cleaned export."
           >
-            Blank all Review
-          </button>
-          <button
-            type="button"
-            onClick={undoLastActionGroup}
-            disabled={undoStack.length === 0}
-            title="Restores the most recent marking or blanking action."
-          >
-            Undo
+            Replace Review with blank
           </button>
         </div>
       </section>
@@ -232,14 +172,15 @@ export function ActionToolbar() {
       <section className="action-section">
         <SectionHeader
           title="Export"
-          help="Cleaned CSV exports cleaned values. Highlighted XLSX is the planned colored export path. Audit Log CSV exports action history."
+          help="Cleaned CSV exports the current sheet with cleaned values. Highlighted XLSX is disabled until styled Excel writing is added. Audit Log CSV records mark, remove, blank, and undo actions."
         />
         <label className="field export-field">
           <span>Export type</span>
           <select value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)}>
             <option value="cleaned-csv">Cleaned CSV</option>
+            <option value="cleaned-xlsx">Cleaned XLSX workbook</option>
             <option value="highlighted-xlsx" disabled>
-              Highlighted XLSX - not available yet
+              Highlighted XLSX workbook (coming later)
             </option>
             <option value="audit-csv">Audit Log CSV</option>
           </select>
@@ -248,8 +189,10 @@ export function ActionToolbar() {
           Export
         </button>
         <p className="hint export-note">
-          Cleaned CSV exports cleaned values and blanked cells. CSV does not store colors. Highlighted XLSX needs a
-          style-capable Excel writer and will be added next.
+          Cleaned CSV exports the current sheet with blanked cells empty. Audit Log CSV records mark, remove, blank, and undo actions.
+          {isXlsxSource
+            ? ' XLSX loaded: CSV export uses the active sheet only. Cleaned XLSX exports all sheets without colors.'
+            : ' Cleaned XLSX exports all sheets without colors.'}
         </p>
       </section>
     </aside>

@@ -38,7 +38,7 @@ export function InspectorControls() {
       </label>
 
       <label className="field">
-        <span>Numeric column</span>
+        <span>Y-axis / value column</span>
         <select
           value={selectedColumn}
           onChange={(event) => setSelectedColumn(event.target.value)}

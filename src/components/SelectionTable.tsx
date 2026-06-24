@@ -6,7 +6,7 @@ import { makeCellId, parseCellId } from '../utils/cellId'
 import { getDisplayValue, getEffectiveValue } from '../utils/numeric'
 
 export function SelectionTable() {
-  const { workbook, activeSheetName, selectedColumn, selectedCells, previewCells, cellState } =
+  const { workbook, activeSheetName, selectedColumn, selectedCells, previewCells, cellState, toggleSelectedCell } =
     useDataInspectorStore()
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
 
@@ -51,6 +51,22 @@ export function SelectionTable() {
     return mark ? `mark-pill ${mark}` : 'mark-pill empty'
   }
 
+  function markLabel(mark: string) {
+    if (mark === 'keep') {
+      return 'Accepted'
+    }
+    if (mark === 'review') {
+      return 'Review'
+    }
+    if (mark === 'problem') {
+      return 'Problem'
+    }
+    if (mark === 'blanked') {
+      return 'Blanked'
+    }
+    return '-'
+  }
+
   return (
     <section className="panel table-panel">
       <div className="panel-title with-tip">
@@ -65,7 +81,7 @@ export function SelectionTable() {
             <thead>
               <tr>
                 <th>Row</th>
-                <th>Column</th>
+                <th>Value column</th>
                 <th>Value</th>
                 <th>Current mark</th>
                 <th>Selected</th>
@@ -75,15 +91,29 @@ export function SelectionTable() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.cellId}>
+                <tr
+                  key={row.cellId}
+                  className={row.isSelected ? 'selectable-row selected-row' : 'selectable-row'}
+                  tabIndex={0}
+                  title="Click to select or unselect this cell."
+                  onClick={() => toggleSelectedCell(row.cellId)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      toggleSelectedCell(row.cellId)
+                    }
+                  }}
+                >
                   <td>{row.rowIndex + 1}</td>
                   <td>{selectedColumn}</td>
                   <td>{getDisplayValue(row.value) || '(blank)'}</td>
                   <td>
-                    <span className={markClass(row.mark)}>{row.mark || '-'}</span>
+                    <span className={markClass(row.mark)}>{markLabel(row.mark)}</span>
                   </td>
                   <td>
-                    <span className={row.isSelected ? 'status-pill selected' : 'status-pill'}>{row.isSelected ? 'Yes' : 'No'}</span>
+                    <span className={row.isSelected ? 'status-pill selected' : 'status-pill'}>
+                      {row.isSelected ? 'Yes' : 'No'}
+                    </span>
                   </td>
                   <td>{row.previewMethod || '-'}</td>
                   <td>{row.previewReason || '-'}</td>
