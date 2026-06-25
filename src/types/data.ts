@@ -34,6 +34,7 @@ export type AuditActionType =
   | 'blank_selected'
   | 'blank_problem'
   | 'blank_review'
+  | 'replace_value'
   | 'undo'
 
 export type AuditAction = {

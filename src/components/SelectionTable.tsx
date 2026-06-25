@@ -34,12 +34,17 @@ export function SelectionTable() {
         const rawRow = sheet.rows[rowIndex]
         const state = cellState[cellId]
         const preview = previewCells[cellId]
+        const isModified =
+          Boolean(state) &&
+          Object.prototype.hasOwnProperty.call(state, 'valueOverride') &&
+          state?.valueOverride !== null
         return {
           cellId,
           rowIndex,
           value: getEffectiveValue(rawRow?.[selectedColumn], state),
           mark: state?.mark ?? '',
           highlightColor: state?.highlightColor,
+          isModified,
           isSelected: Boolean(selectedCells[cellId]),
           previewMethod: preview?.method ?? '',
           previewReason: preview?.reason ?? '',
@@ -71,70 +76,99 @@ export function SelectionTable() {
     return '-'
   }
 
+  const queueSummary = {
+    selected: rows.filter((row) => row.isSelected).length,
+    previewed: rows.filter((row) => row.previewMethod).length,
+    modified: rows.filter((row) => row.isModified).length,
+    accepted: rows.filter((row) => row.mark === 'keep').length,
+    problem: rows.filter((row) => row.mark === 'problem').length,
+    review: rows.filter((row) => row.mark === 'review').length,
+  }
+
   return (
     <section className="panel table-panel">
       <div className="panel-title with-tip">
-        <span>Review Queue</span>
+        <span className="queue-title">
+          Review Queue
+          <span className="queue-count">{rows.length.toLocaleString()}</span>
+        </span>
         <InfoTip label="Rows currently selected, previewed, highlighted, or changed." />
       </div>
       {rows.length === 0 ? (
         <p className="hint">Select points, preview suggestions, or highlight values to see rows here.</p>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Row</th>
-                <th>Value column</th>
-                <th>Value</th>
-                <th>Current mark</th>
-                <th>Selected</th>
-                <th>Preview method</th>
-                <th>Preview reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.cellId}
-                  className={row.isSelected ? 'selectable-row selected-row' : 'selectable-row'}
-                  tabIndex={0}
-                  title="Click to select or unselect this cell."
-                  onClick={() => toggleSelectedCell(row.cellId)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      toggleSelectedCell(row.cellId)
-                    }
-                  }}
-                >
-                  <td>{row.rowIndex + 1}</td>
-                  <td>{selectedColumn}</td>
-                  <td>{getDisplayValue(row.value) || '(blank)'}</td>
-                  <td>
-                    <span
-                      className={markClass(row.mark)}
-                      style={
-                        row.mark === 'custom' && row.highlightColor
-                          ? { borderColor: row.highlightColor, backgroundColor: row.highlightColor, color: '#111827' }
-                          : undefined
-                      }
-                    >
-                      {markLabel(row.mark)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={row.isSelected ? 'status-pill selected' : 'status-pill'}>
-                      {row.isSelected ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                  <td>{row.previewMethod || '-'}</td>
-                  <td>{row.previewReason || '-'}</td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Value column</th>
+                  <th>Value</th>
+                  <th>Current mark</th>
+                  <th>Selected</th>
+                  <th>Preview method</th>
+                  <th>Preview reason</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.cellId}
+                    className={row.isSelected ? 'selectable-row selected-row' : 'selectable-row'}
+                    tabIndex={0}
+                    title="Click to select or unselect this cell."
+                    onClick={() => toggleSelectedCell(row.cellId)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        toggleSelectedCell(row.cellId)
+                      }
+                    }}
+                  >
+                    <td>{row.rowIndex + 1}</td>
+                    <td>{selectedColumn}</td>
+                    <td>{getDisplayValue(row.value) || '(blank)'}</td>
+                    <td>
+                      <span className="mark-stack">
+                        {row.mark ? (
+                          <span
+                            className={markClass(row.mark)}
+                            style={
+                              row.mark === 'custom' && row.highlightColor
+                                ? { borderColor: row.highlightColor, backgroundColor: row.highlightColor, color: '#111827' }
+                                : undefined
+                            }
+                          >
+                            {markLabel(row.mark)}
+                          </span>
+                        ) : null}
+                        {row.isModified ? <span className="mark-pill modified">Modified</span> : null}
+                        {!row.mark && !row.isModified ? <span className="mark-pill empty">-</span> : null}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={row.isSelected ? 'status-pill selected' : 'status-pill'}>
+                        {row.isSelected ? 'Yes' : 'No'}
+                      </span>
+                    </td>
+                    <td>{row.previewMethod || '-'}</td>
+                    <td>{row.previewReason || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="queue-footer" aria-label="Review Queue summary">
+            <span>{rows.length.toLocaleString()} rows shown</span>
+            <span>Selected: {queueSummary.selected.toLocaleString()}</span>
+            <span>Previewed: {queueSummary.previewed.toLocaleString()}</span>
+            <span>Modified: {queueSummary.modified.toLocaleString()}</span>
+            <span>Accepted: {queueSummary.accepted.toLocaleString()}</span>
+            <span>Problem: {queueSummary.problem.toLocaleString()}</span>
+            <span>Review: {queueSummary.review.toLocaleString()}</span>
+          </div>
+        </>
       )}
     </section>
   )

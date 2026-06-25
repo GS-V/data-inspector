@@ -256,6 +256,8 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   const previewPoints = points.filter((point) => point.isPreviewed)
   const selectedPoints = points.filter((point) => point.isSelected)
   const selectedOutline = theme === 'dark' ? '#f8fafc' : '#111827'
+  const densePreview = previewPoints.length > 500
+  const denseSelection = selectedPoints.length > 500
 
   return (
     <section className="panel chart-panel">
@@ -301,9 +303,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             name: 'Preview suggestion',
             marker: {
               color: '#8b5cf6',
-              size: 16,
+              size: densePreview ? 12 : 16,
               symbol: 'diamond-open',
-              line: { color: '#8b5cf6', width: 3 },
+              line: { color: '#8b5cf6', width: densePreview ? 1.5 : 3 },
             },
             showlegend: false,
           },
@@ -312,9 +314,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             name: 'Selected',
             marker: {
               color: selectedOutline,
-              size: 19,
+              size: denseSelection ? 14 : 19,
               symbol: 'circle-open',
-              line: { color: selectedOutline, width: 4 },
+              line: { color: selectedOutline, width: denseSelection ? 2 : 4 },
             },
             showlegend: false,
           },

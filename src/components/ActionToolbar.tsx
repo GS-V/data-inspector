@@ -4,6 +4,7 @@ import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { CellMark } from '../types/data'
 import { makeCellId } from '../utils/cellId'
 import { buildAuditLogCsv, buildCleanedCsv, downloadCsv, downloadHighlightedXlsxWorkbook } from '../utils/exportCsv'
+import { findNumericColumns } from '../utils/numeric'
 
 type ExportType = 'csv' | 'xlsx'
 type ExportStatus = 'idle' | 'preparing' | 'applying' | 'creating' | 'ready' | 'failed'
@@ -43,6 +44,10 @@ function SectionHeader({ title, help }: { title: string; help?: string }) {
   )
 }
 
+function isCleanNumberInput(value: string): boolean {
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())
+}
+
 export function ActionToolbar() {
   const {
     workbook,
@@ -53,10 +58,13 @@ export function ActionToolbar() {
     cellState,
     auditLog,
     undoStack,
+    replaceSelectedTargets,
     blankSelectedTargets,
     blankMarkedInCurrentColumn,
     undoLastActionGroup,
   } = useDataInspectorStore()
+  const [replacementValue, setReplacementValue] = useState('')
+  const [replacementMessage, setReplacementMessage] = useState('')
   const [exportType, setExportType] = useState<ExportType>('csv')
   const [exportNameDraft, setExportNameDraft] = useState<{ sourceFileName?: string; value: string }>({
     sourceFileName: undefined,
@@ -67,6 +75,7 @@ export function ActionToolbar() {
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
+  const selectedCount = Object.keys(selectedCells).length
   const isXlsxSource = workbook?.fileName.toLowerCase().endsWith('.xlsx') || workbook?.fileName.toLowerCase().endsWith('.xls')
   const exportName =
     exportNameDraft.sourceFileName === workbook?.fileName
@@ -114,6 +123,45 @@ export function ActionToolbar() {
 
     return { sheetCounts: nextSheetCounts, selectedColumnCounts: nextSelectedColumnCounts }
   }, [cellState, selectedColumn, sheet])
+
+  const selectedColumnIsNumeric = useMemo(() => {
+    if (!sheet || !selectedColumn) {
+      return false
+    }
+
+    return findNumericColumns(sheet.rows, sheet.columns).includes(selectedColumn)
+  }, [selectedColumn, sheet])
+
+  function parseReplacementValue(): string | number | null {
+    const trimmed = replacementValue.trim()
+    if (trimmed === '') {
+      return null
+    }
+
+    if (selectedColumnIsNumeric && isCleanNumberInput(trimmed)) {
+      return Number(trimmed)
+    }
+
+    return trimmed
+  }
+
+  function handleReplaceSelected() {
+    const parsedValue = parseReplacementValue()
+    if (parsedValue === null) {
+      setReplacementMessage('Enter a new value first. Use blanking to clear values.')
+      return
+    }
+
+    if (selectedCount === 0) {
+      setReplacementMessage('Select one or more values first.')
+      return
+    }
+
+    replaceSelectedTargets(parsedValue)
+    setReplacementMessage(
+      `Replacement applied to ${selectedCount.toLocaleString()} selected value${selectedCount === 1 ? '' : 's'}.`,
+    )
+  }
 
   function safeExportName(): string {
     return fileStem(exportName || workbook?.fileName || 'data-inspector')
@@ -214,9 +262,31 @@ export function ActionToolbar() {
       <section className="action-section">
         <SectionHeader
           title="Cleaning"
-          help="Blanking affects the cleaned export only. Raw data stays unchanged and rows are never deleted."
+          help="Replacements and blanking affect cleaned exports only. Raw data stays unchanged and rows are never deleted."
         />
         <div className="button-group">
+          <label className="field replacement-field">
+            <span>New value</span>
+            <input
+              value={replacementValue}
+              onChange={(event) => {
+                setReplacementValue(event.target.value)
+                setReplacementMessage('')
+              }}
+              placeholder="Enter replacement"
+              aria-label="New replacement value"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleReplaceSelected}
+            disabled={selectedCount === 0 || replacementValue.trim() === ''}
+            title="Replaces selected values in cleaned exports. Raw data is not changed."
+          >
+            <span className="button-icon" aria-hidden="true">↔</span>
+            Replace selected with new value
+          </button>
+          {replacementMessage ? <p className="hint action-message">{replacementMessage}</p> : null}
           <button
             type="button"
             className="danger-soft"
@@ -249,7 +319,7 @@ export function ActionToolbar() {
             type="button"
             onClick={undoLastActionGroup}
             disabled={undoStack.length === 0}
-            title="Reverses the most recent grouped mark, remove highlight, or blank action."
+            title="Reverses the most recent grouped mark, replace, remove highlight, or blank action."
           >
             <span className="button-icon" aria-hidden="true">↶</span>
             Undo last action

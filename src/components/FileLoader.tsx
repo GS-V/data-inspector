@@ -38,8 +38,8 @@ export function FileLoader() {
           <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} />
         </label>
         <p className="privacy-note">
-          Files are processed locally in your browser. Nothing is uploaded.
-          <InfoTip label="Files are processed locally in your browser. Nothing is uploaded." />
+          Files stay in this browser. Nothing is uploaded.
+          <InfoTip label="Files stay in this browser. Export your cleaned file when you are done." />
         </p>
       </div>
       <div className="file-status">

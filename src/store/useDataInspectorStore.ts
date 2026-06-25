@@ -46,6 +46,7 @@ type DataInspectorState = {
   clearPreview: () => void
   markTargets: (mark: Exclude<CellMark, 'blanked'>, highlightColor?: string) => void
   clearTargetMarks: () => void
+  replaceSelectedTargets: (value: string | number) => void
   blankSelectedTargets: () => void
   blankMarkedInCurrentColumn: (mark: 'problem' | 'review') => void
   undoLastActionGroup: () => void
@@ -308,6 +309,30 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             reason: 'Cleared mark',
           }
         })
+
+      applyCellChanges(changes)
+    },
+
+    replaceSelectedTargets: (value) => {
+      const { cellState, selectedCells } = get()
+      const changes = Object.keys(selectedCells).map((cellId) => {
+        const nextState = {
+          ...(cellState[cellId] ?? {}),
+          valueOverride: value,
+        }
+
+        if (nextState.mark === 'blanked') {
+          delete nextState.mark
+        }
+
+        return {
+          cellId,
+          nextState,
+          actionType: 'replace_value' as const,
+          method: 'manual replacement',
+          reason: `Replaced selected value with ${String(value)}`,
+        }
+      })
 
       applyCellChanges(changes)
     },

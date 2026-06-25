@@ -22,11 +22,27 @@ function getInitialTheme(): ThemeMode {
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme)
   const workbook = useDataInspectorStore((state) => state.workbook)
+  const auditLogLength = useDataInspectorStore((state) => state.auditLog.length)
+  const hasUnsavedWork = Boolean(workbook && auditLogLength > 0)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('data-inspector-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!hasUnsavedWork) {
+      return
+    }
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [hasUnsavedWork])
 
   return (
     <main className="app-shell">
@@ -43,6 +59,10 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
+          <div className="header-file" title={workbook?.fileName ?? 'No file opened'}>
+            <span>{workbook?.fileName ?? 'No file opened'}</span>
+            <span aria-hidden="true">□</span>
+          </div>
           <button
             className="theme-toggle"
             type="button"
@@ -52,10 +72,6 @@ function App() {
             <span aria-hidden="true">☼</span>
             {theme === 'light' ? 'Dark' : 'Light'}
           </button>
-          <div className="header-file" title={workbook?.fileName ?? 'No file opened'}>
-            <span>{workbook?.fileName ?? 'No file opened'}</span>
-            <span aria-hidden="true">□</span>
-          </div>
         </div>
       </header>
 
