@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Plot from 'react-plotly.js'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
+import type { CellState } from '../types/data'
 import { ROW_ORDER_AXIS } from '../types/data'
 import { makeCellId } from '../utils/cellId'
 import { getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
@@ -11,20 +12,24 @@ type PlotPointEvent = {
   }>
 }
 
-function markColor(mark: string | undefined, isBlanked: boolean): string {
+function markColor(state: CellState | undefined, isBlanked: boolean): string {
   if (isBlanked) {
     return '#9ca3af'
   }
 
-  if (mark === 'review') {
+  if (state?.mark === 'custom') {
+    return state.highlightColor ?? '#a855f7'
+  }
+
+  if (state?.mark === 'review') {
     return '#facc15'
   }
 
-  if (mark === 'problem') {
+  if (state?.mark === 'problem') {
     return '#fb7185'
   }
 
-  if (mark === 'keep') {
+  if (state?.mark === 'keep') {
     return '#22c55e'
   }
 
@@ -72,6 +77,7 @@ function pointTrace(points: ChartPoint[], traceType: 'scatter' | 'scattergl' = '
 
 export function InspectorChart({ theme }: InspectorChartProps) {
   const [emptySelectionVersion, setEmptySelectionVersion] = useState(0)
+  const [showBlankedPoints, setShowBlankedPoints] = useState(true)
   const {
     workbook,
     activeSheetName,
@@ -92,9 +98,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     theme === 'dark'
       ? {
           paper: '#141a24',
-          plot: '#111827',
+          plot: '#0c1726',
           text: '#e5e7eb',
-          grid: '#334155',
+          grid: '#243349',
           histogram: '#60a5fa',
           histogramLine: '#93c5fd',
         }
@@ -131,8 +137,11 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     return (
       <section className="panel chart-panel">
         <div className="chart-toolbar">
-          <div className="chart-tip">Tip: switch to Scatter to click or drag-select individual values.</div>
+          <div className="chart-tip">Tip: switch to Scatter to click or drag-select values.</div>
           <div className="chart-actions">
+            <button type="button" onClick={() => setShowBlankedPoints((current) => !current)}>
+              {showBlankedPoints ? 'Hide blanked points' : 'Show blanked points'}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -182,7 +191,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             scrollZoom: true,
             modeBarButtonsToRemove: ['toImage'],
           }}
-          style={{ width: '100%', height: '560px' }}
+          style={{ width: '100%', height: '100%' }}
           useResizeHandler
         />
       </section>
@@ -194,6 +203,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
       const cellId = makeCellId(sheet.name, rowIndex, selectedColumn)
       const state = cellState[cellId]
       const isBlanked = state?.valueOverride === null || state?.mark === 'blanked'
+      if (isBlanked && !showBlankedPoints) {
+        return null
+      }
       const yValue = toNumber(isBlanked ? row[selectedColumn] : getEffectiveValue(row[selectedColumn], state))
       const xValue =
         xAxis === ROW_ORDER_AXIS
@@ -212,7 +224,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
         x: xValue,
         y: yValue,
         cellId,
-        color: markColor(state?.mark, isBlanked),
+        color: markColor(state, isBlanked),
         size: isBlanked ? 8 : 9,
         opacity: isBlanked ? 0.52 : 0.88,
         isPreviewed,
@@ -222,7 +234,15 @@ export function InspectorChart({ theme }: InspectorChartProps) {
           `Y-axis / value column: ${selectedColumn}`,
           `Value: ${getDisplayValue(effectiveValue) || '(blank)'}`,
           `X-axis: ${xAxis === ROW_ORDER_AXIS ? 'Row order' : xAxis}`,
-          state?.mark ? `Highlight: ${state.mark === 'keep' ? 'accepted' : state.mark}` : '',
+          state?.mark
+            ? `Highlight: ${
+                state.mark === 'keep'
+                  ? 'accepted'
+                  : state.mark === 'custom'
+                    ? `custom ${state.highlightColor ?? ''}`.trim()
+                    : state.mark
+              }`
+            : '',
           isBlanked ? 'Cleaned export: blank' : '',
           isSelected ? 'Selected' : '',
           isPreviewed ? `Suggested by preview: ${previewCells[cellId]?.method}` : '',
@@ -240,8 +260,11 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   return (
     <section className="panel chart-panel">
       <div className="chart-toolbar">
-        <div className="chart-tip">Tip: click points to select or unselect. Use the mode bar for zoom, pan, box select, lasso, and reset view.</div>
+        <div className="chart-tip">Tip: click points to select. Drag to select many. Use the toolbar to zoom or reset.</div>
         <div className="chart-actions">
+          <button type="button" onClick={() => setShowBlankedPoints((current) => !current)}>
+            {showBlankedPoints ? 'Hide blanked points' : 'Show blanked points'}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -327,7 +350,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
           modeBarButtonsToAdd: ['select2d', 'lasso2d'],
           modeBarButtonsToRemove: ['toImage'],
         }}
-        style={{ width: '100%', height: '560px' }}
+        style={{ width: '100%', height: '100%' }}
         useResizeHandler
         onClick={(event) => {
           const [cellId] = eventCellIds(event)

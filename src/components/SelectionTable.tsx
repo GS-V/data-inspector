@@ -39,6 +39,7 @@ export function SelectionTable() {
           rowIndex,
           value: getEffectiveValue(rawRow?.[selectedColumn], state),
           mark: state?.mark ?? '',
+          highlightColor: state?.highlightColor,
           isSelected: Boolean(selectedCells[cellId]),
           previewMethod: preview?.method ?? '',
           previewReason: preview?.reason ?? '',
@@ -64,17 +65,20 @@ export function SelectionTable() {
     if (mark === 'blanked') {
       return 'Blanked'
     }
+    if (mark === 'custom') {
+      return 'Custom'
+    }
     return '-'
   }
 
   return (
     <section className="panel table-panel">
       <div className="panel-title with-tip">
-        <span>Selected, Previewed, and Marked Rows</span>
-        <InfoTip label="This table shows temporary selections, temporary previews, and persistent marks for the selected column." />
+        <span>Review Queue</span>
+        <InfoTip label="Rows currently selected, previewed, highlighted, or changed." />
       </div>
       {rows.length === 0 ? (
-        <p className="hint">Select points, run a preview, or mark values to see row context here.</p>
+        <p className="hint">Select points, preview suggestions, or highlight values to see rows here.</p>
       ) : (
         <div className="table-wrap">
           <table>
@@ -108,7 +112,16 @@ export function SelectionTable() {
                   <td>{selectedColumn}</td>
                   <td>{getDisplayValue(row.value) || '(blank)'}</td>
                   <td>
-                    <span className={markClass(row.mark)}>{markLabel(row.mark)}</span>
+                    <span
+                      className={markClass(row.mark)}
+                      style={
+                        row.mark === 'custom' && row.highlightColor
+                          ? { borderColor: row.highlightColor, backgroundColor: row.highlightColor, color: '#111827' }
+                          : undefined
+                      }
+                    >
+                      {markLabel(row.mark)}
+                    </span>
                   </td>
                   <td>
                     <span className={row.isSelected ? 'status-pill selected' : 'status-pill'}>

@@ -21,7 +21,7 @@ export function InspectorControls() {
 
   return (
     <section className="panel controls-panel">
-      <div className="panel-title">Inspect</div>
+      <div className="panel-title">Inspect Data</div>
       <label className="field">
         <span>Sheet</span>
         <select
@@ -38,7 +38,7 @@ export function InspectorControls() {
       </label>
 
       <label className="field">
-        <span>Y-axis / value column</span>
+        <span>Value column</span>
         <select
           value={selectedColumn}
           onChange={(event) => setSelectedColumn(event.target.value)}
@@ -72,7 +72,7 @@ export function InspectorControls() {
         </select>
       </label>
 
-      <p className="hint">Scatter supports click selection and drag selection. Histogram shows the column distribution.</p>
+      <p className="hint">Scatter lets you click or drag-select values. Histogram shows the selected column’s distribution.</p>
 
       {sheet && numericColumns.length === 0 ? (
         <p className="hint">No numeric columns were found in this sheet.</p>

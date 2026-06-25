@@ -44,7 +44,7 @@ type DataInspectorState = {
   clearSelection: () => void
   setPreviewCells: (previewCells: PreviewCell[]) => void
   clearPreview: () => void
-  markTargets: (mark: Exclude<CellMark, 'blanked'>) => void
+  markTargets: (mark: Exclude<CellMark, 'blanked'>, highlightColor?: string) => void
   clearTargetMarks: () => void
   blankSelectedTargets: () => void
   blankMarkedInCurrentColumn: (mark: 'problem' | 'review') => void
@@ -70,9 +70,10 @@ function compactCellState(state?: CellState): CellState | undefined {
 
   const hasOverride = Object.prototype.hasOwnProperty.call(state, 'valueOverride')
   const hasMark = Boolean(state.mark)
+  const hasHighlightColor = Boolean(state.highlightColor)
   const hasNote = Boolean(state.note)
 
-  if (!hasOverride && !hasMark && !hasNote) {
+  if (!hasOverride && !hasMark && !hasHighlightColor && !hasNote) {
     return undefined
   }
 
@@ -108,7 +109,11 @@ function markActionType(mark: Exclude<CellMark, 'blanked'>): AuditActionType {
     return 'mark_problem'
   }
 
-  return 'mark_keep'
+  if (mark === 'keep') {
+    return 'mark_keep'
+  }
+
+  return 'mark_custom'
 }
 
 export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
@@ -265,15 +270,24 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
 
     clearPreview: () => set({ previewCells: {} }),
 
-    markTargets: (mark) => {
+    markTargets: (mark, highlightColor) => {
       const { cellState } = get()
-      const changes = getTargetCellIds().map((cellId) => ({
-        cellId,
-        nextState: { ...(cellState[cellId] ?? {}), mark },
-        actionType: markActionType(mark),
-        method: 'manual mark',
-        reason: `Marked ${mark}`,
-      }))
+      const changes = getTargetCellIds().map((cellId) => {
+        const nextState = { ...(cellState[cellId] ?? {}), mark }
+        if (mark === 'custom') {
+          nextState.highlightColor = highlightColor ?? '#a855f7'
+        } else {
+          delete nextState.highlightColor
+        }
+
+        return {
+          cellId,
+          nextState,
+          actionType: markActionType(mark),
+          method: 'manual mark',
+          reason: mark === 'custom' ? `Custom highlight ${nextState.highlightColor}` : `Marked ${mark}`,
+        }
+      })
 
       applyCellChanges(changes)
     },
@@ -285,6 +299,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         .map((cellId) => {
           const nextState = { ...(cellState[cellId] ?? {}) }
           delete nextState.mark
+          delete nextState.highlightColor
           return {
             cellId,
             nextState,
@@ -299,13 +314,22 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
 
     blankSelectedTargets: () => {
       const { cellState } = get()
-      const changes = getTargetCellIds().map((cellId) => ({
-        cellId,
-        nextState: { ...(cellState[cellId] ?? {}), valueOverride: null, mark: 'blanked' as const },
-        actionType: 'blank_selected' as const,
-        method: 'manual blank',
-        reason: 'Blanked selected or previewed cell',
-      }))
+      const changes = getTargetCellIds().map((cellId) => {
+        const nextState = {
+          ...(cellState[cellId] ?? {}),
+          valueOverride: null,
+          mark: 'blanked' as const,
+        }
+        delete nextState.highlightColor
+
+        return {
+          cellId,
+          nextState,
+          actionType: 'blank_selected' as const,
+          method: 'manual blank',
+          reason: 'Blanked selected or previewed cell',
+        }
+      })
 
       applyCellChanges(changes)
     },
@@ -320,17 +344,22 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       const changes = sheet.rows
         .map((_, rowIndex) => makeCellId(sheet.name, rowIndex, state.selectedColumn))
         .filter((cellId) => state.cellState[cellId]?.mark === mark)
-        .map((cellId) => ({
-          cellId,
-          nextState: {
+        .map((cellId) => {
+          const nextState = {
             ...(state.cellState[cellId] ?? {}),
             valueOverride: null,
             mark: 'blanked' as const,
-          },
-          actionType: mark === 'problem' ? ('blank_problem' as const) : ('blank_review' as const),
-          method: `blank all ${mark}`,
-          reason: `Blanked all ${mark} cells in current sheet and column`,
-        }))
+          }
+          delete nextState.highlightColor
+
+          return {
+            cellId,
+            nextState,
+            actionType: mark === 'problem' ? ('blank_problem' as const) : ('blank_review' as const),
+            method: `blank all ${mark}`,
+            reason: `Blanked all ${mark} cells in current sheet and column`,
+          }
+        })
 
       applyCellChanges(changes)
     },

@@ -29,10 +29,12 @@ export function FileLoader() {
   }
 
   return (
-    <section className="file-loader panel">
+    <section className="file-loader">
       <div>
         <label className="file-picker">
+          <span className="button-icon" aria-hidden="true">⇧</span>
           <span>Open CSV or XLSX</span>
+          <span className="file-caret" aria-hidden="true">⌄</span>
           <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} />
         </label>
         <p className="privacy-note">
@@ -41,8 +43,6 @@ export function FileLoader() {
         </p>
       </div>
       <div className="file-status">
-        <span className="label">File</span>
-        <strong>{workbook?.fileName ?? 'No file opened'}</strong>
         {isLoading ? <span className="muted">Reading file...</span> : null}
         {workbook?.parseWarnings?.length ? (
           <span className="warning-text">

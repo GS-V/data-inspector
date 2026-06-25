@@ -1,7 +1,19 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import type { AuditAction, CellState, RawCellValue, SheetData, WorkbookData } from '../types/data'
 import { makeCellId } from './cellId'
 import { getDisplayValue, getEffectiveValue } from './numeric'
+
+type FillColor = {
+  argb: string
+}
+
+type PatternFill = {
+  type: 'pattern'
+  pattern: 'solid'
+  fgColor: FillColor
+}
+
+type ExportCellValue = string | number | boolean | Date | null
 
 function escapeCsvValue(value: RawCellValue): string {
   const text = getDisplayValue(value)
@@ -33,16 +45,6 @@ export function buildCleanedCsv(
   return rowsToCsv(rows, sheet.columns)
 }
 
-function cleanedSheetRows(sheet: SheetData, cellState: Record<string, CellState>) {
-  return sheet.rows.map((row, rowIndex) =>
-    sheet.columns.map((column) => {
-      const cellId = makeCellId(sheet.name, rowIndex, column)
-      const value = getEffectiveValue(row[column], cellState[cellId])
-      return value ?? ''
-    }),
-  )
-}
-
 function uniqueExcelSheetName(sheetName: string, usedNames: Set<string>) {
   const baseName = (sheetName.trim() || 'Sheet').slice(0, 31)
   let nextName = baseName
@@ -58,20 +60,144 @@ function uniqueExcelSheetName(sheetName: string, usedNames: Set<string>) {
   return nextName
 }
 
-export function downloadCleanedXlsxWorkbook(
+function hexToArgb(hexColor: string): string {
+  const normalized = hexColor.replace('#', '').trim()
+  if (/^[0-9a-f]{6}$/i.test(normalized)) {
+    return `FF${normalized.toUpperCase()}`
+  }
+
+  return 'FFA855F7'
+}
+
+function cellFill(state?: CellState): PatternFill | undefined {
+  if (state?.valueOverride === null || state?.mark === 'blanked') {
+    return undefined
+  }
+
+  if (!state?.mark && state?.valueOverride !== null) {
+    return undefined
+  }
+
+  if (state.mark === 'review') {
+    return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } }
+  }
+
+  if (state.mark === 'problem') {
+    return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFB3C1' } }
+  }
+
+  if (state.mark === 'keep') {
+    return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } }
+  }
+
+  if (state.mark === 'custom') {
+    return {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: hexToArgb(state.highlightColor ?? '#a855f7') },
+    }
+  }
+
+  return undefined
+}
+
+function isSafeNumericString(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return false
+  }
+
+  const numericPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
+  if (!numericPattern.test(trimmed)) {
+    return false
+  }
+
+  const withoutSign = trimmed.replace(/^[+-]/, '')
+  if (/^0\d/.test(withoutSign)) {
+    return false
+  }
+
+  return Number.isFinite(Number(trimmed))
+}
+
+function coerceXlsxExportCellValue(value: RawCellValue): ExportCellValue {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'boolean' || value instanceof Date) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    if (value.trim() === '') {
+      return null
+    }
+
+    if (isSafeNumericString(value)) {
+      return Number(value.trim())
+    }
+  }
+
+  return value
+}
+
+function downloadBlob(fileName: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+export async function downloadHighlightedXlsxWorkbook(
   fileName: string,
   workbookData: WorkbookData,
   cellState: Record<string, CellState>,
 ) {
-  const workbook = XLSX.utils.book_new()
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'Data Inspector'
+  workbook.created = new Date()
+  workbook.modified = new Date()
   const usedSheetNames = new Set<string>()
 
   workbookData.sheets.forEach((sheet) => {
-    const worksheet = XLSX.utils.aoa_to_sheet([sheet.columns, ...cleanedSheetRows(sheet, cellState)])
-    XLSX.utils.book_append_sheet(workbook, worksheet, uniqueExcelSheetName(sheet.name, usedSheetNames))
+    const worksheet = workbook.addWorksheet(uniqueExcelSheetName(sheet.name, usedSheetNames))
+    worksheet.addRow(sheet.columns)
+
+    sheet.rows.forEach((row, rowIndex) => {
+      const excelRow = worksheet.addRow(
+        sheet.columns.map((column) => {
+          const cellId = makeCellId(sheet.name, rowIndex, column)
+          const value = getEffectiveValue(row[column], cellState[cellId])
+          return coerceXlsxExportCellValue(value)
+        }),
+      )
+
+      sheet.columns.forEach((column, columnIndex) => {
+        const cellId = makeCellId(sheet.name, rowIndex, column)
+        const fill = cellFill(cellState[cellId])
+        if (fill) {
+          excelRow.getCell(columnIndex + 1).fill = fill
+        }
+      })
+    })
   })
 
-  XLSX.writeFile(workbook, fileName)
+  const buffer = await workbook.xlsx.writeBuffer()
+  downloadBlob(
+    fileName,
+    new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+  )
 }
 
 export function buildAuditLogCsv(auditLog: AuditAction[]): string {
@@ -105,12 +231,5 @@ export function buildAuditLogCsv(auditLog: AuditAction[]): string {
 
 export function downloadCsv(fileName: string, csv: string) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  downloadBlob(fileName, blob)
 }

@@ -16,10 +16,11 @@ export type WorkbookData = {
 
 export type CellId = string
 
-export type CellMark = 'review' | 'problem' | 'keep' | 'blanked'
+export type CellMark = 'review' | 'problem' | 'keep' | 'custom' | 'blanked'
 
 export type CellState = {
   mark?: CellMark
+  highlightColor?: string
   valueOverride?: string | number | null
   note?: string
 }
@@ -28,6 +29,7 @@ export type AuditActionType =
   | 'mark_review'
   | 'mark_problem'
   | 'mark_keep'
+  | 'mark_custom'
   | 'clear_mark'
   | 'blank_selected'
   | 'blank_problem'
