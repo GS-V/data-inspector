@@ -21,6 +21,15 @@ type CellChange = {
   actionType: AuditActionType
   method: string
   reason: string
+  reasonCategory?: string
+  reasonNote?: string
+  methodContext?: string
+}
+
+export type AuditReasonInput = {
+  reasonCategory?: string
+  reasonNote?: string
+  methodContext?: string
 }
 
 type DataInspectorState = {
@@ -46,9 +55,9 @@ type DataInspectorState = {
   clearPreview: () => void
   markTargets: (mark: Exclude<CellMark, 'blanked'>, highlightColor?: string) => void
   clearTargetMarks: () => void
-  replaceSelectedTargets: (value: string | number) => void
-  blankSelectedTargets: () => void
-  blankMarkedInCurrentColumn: (mark: 'problem' | 'review') => void
+  replaceSelectedTargets: (value: string | number, reasonInput?: AuditReasonInput) => void
+  blankSelectedTargets: (reasonInput?: AuditReasonInput) => void
+  blankMarkedInCurrentColumn: (mark: 'problem' | 'review', reasonInput?: AuditReasonInput) => void
   undoLastActionGroup: () => void
 }
 
@@ -117,6 +126,32 @@ function markActionType(mark: Exclude<CellMark, 'blanked'>): AuditActionType {
   return 'mark_custom'
 }
 
+function normalizeReasonInput(reasonInput?: AuditReasonInput): AuditReasonInput {
+  return {
+    reasonCategory: reasonInput?.reasonCategory?.trim() || undefined,
+    reasonNote: reasonInput?.reasonNote?.trim() || undefined,
+    methodContext: reasonInput?.methodContext?.trim() || undefined,
+  }
+}
+
+function readableReason(baseReason: string, reasonInput?: AuditReasonInput): string {
+  const normalized = normalizeReasonInput(reasonInput)
+  const detail = [normalized.reasonCategory, normalized.reasonNote].filter(Boolean).join(' — ')
+  return detail ? `${baseReason} — ${detail}` : baseReason
+}
+
+function withReasonContext<T extends Omit<CellChange, 'reasonCategory' | 'reasonNote' | 'methodContext'>>(
+  change: T,
+  reasonInput?: AuditReasonInput,
+): T & AuditReasonInput {
+  const normalized = normalizeReasonInput(reasonInput)
+  return {
+    ...change,
+    ...normalized,
+    reason: readableReason(change.reason, normalized),
+  }
+}
+
 export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
   function applyCellChanges(changes: CellChange[]) {
     const state = get()
@@ -163,6 +198,9 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         newCellState,
         method: change.method,
         reason: change.reason,
+        reasonCategory: change.reasonCategory,
+        reasonNote: change.reasonNote,
+        methodContext: change.methodContext,
       })
     })
 
@@ -181,6 +219,15 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     return Array.from(
       new Set([...Object.keys(get().selectedCells), ...Object.keys(get().previewCells)]),
     )
+  }
+
+  function previewMethodContext(cellIds: CellId[]): string | undefined {
+    const { previewCells } = get()
+    const methods = Array.from(
+      new Set(cellIds.map((cellId) => previewCells[cellId]?.method).filter(Boolean)),
+    )
+
+    return methods.length > 0 ? `Acted after preview: ${methods.join(', ')}` : undefined
   }
 
   return {
@@ -273,7 +320,9 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
 
     markTargets: (mark, highlightColor) => {
       const { cellState } = get()
-      const changes = getTargetCellIds().map((cellId) => {
+      const targetCellIds = getTargetCellIds()
+      const methodContext = previewMethodContext(targetCellIds)
+      const changes = targetCellIds.map((cellId) => {
         const nextState = { ...(cellState[cellId] ?? {}), mark }
         if (mark === 'custom') {
           nextState.highlightColor = highlightColor ?? '#a855f7'
@@ -287,6 +336,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
           actionType: markActionType(mark),
           method: 'manual mark',
           reason: mark === 'custom' ? `Custom highlight ${nextState.highlightColor}` : `Marked ${mark}`,
+          methodContext,
         }
       })
 
@@ -295,7 +345,9 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
 
     clearTargetMarks: () => {
       const { cellState } = get()
-      const changes = getTargetCellIds()
+      const targetCellIds = getTargetCellIds()
+      const methodContext = previewMethodContext(targetCellIds)
+      const changes = targetCellIds
         .filter((cellId) => Boolean(cellState[cellId]?.mark))
         .map((cellId) => {
           const nextState = { ...(cellState[cellId] ?? {}) }
@@ -307,13 +359,14 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             actionType: 'clear_mark' as const,
             method: 'manual clear',
             reason: 'Cleared mark',
+            methodContext,
           }
         })
 
       applyCellChanges(changes)
     },
 
-    replaceSelectedTargets: (value) => {
+    replaceSelectedTargets: (value, reasonInput) => {
       const { cellState, selectedCells } = get()
       const changes = Object.keys(selectedCells).map((cellId) => {
         const nextState = {
@@ -325,19 +378,19 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
           delete nextState.mark
         }
 
-        return {
+        return withReasonContext({
           cellId,
           nextState,
           actionType: 'replace_value' as const,
           method: 'manual replacement',
           reason: `Replaced selected value with ${String(value)}`,
-        }
+        }, reasonInput)
       })
 
       applyCellChanges(changes)
     },
 
-    blankSelectedTargets: () => {
+    blankSelectedTargets: (reasonInput) => {
       const { cellState } = get()
       const changes = getTargetCellIds().map((cellId) => {
         const nextState = {
@@ -347,19 +400,19 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         }
         delete nextState.highlightColor
 
-        return {
+        return withReasonContext({
           cellId,
           nextState,
           actionType: 'blank_selected' as const,
           method: 'manual blank',
           reason: 'Blanked selected or previewed cell',
-        }
+        }, reasonInput)
       })
 
       applyCellChanges(changes)
     },
 
-    blankMarkedInCurrentColumn: (mark) => {
+    blankMarkedInCurrentColumn: (mark, reasonInput) => {
       const state = get()
       const sheet = getSheet(state.workbook, state.activeSheetName)
       if (!sheet || !state.selectedColumn) {
@@ -377,13 +430,13 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
           }
           delete nextState.highlightColor
 
-          return {
+          return withReasonContext({
             cellId,
             nextState,
             actionType: mark === 'problem' ? ('blank_problem' as const) : ('blank_review' as const),
             method: `blank all ${mark}`,
             reason: `Blanked all ${mark} cells in current sheet and column`,
-          }
+          }, reasonInput)
         })
 
       applyCellChanges(changes)
@@ -435,6 +488,11 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             newCellState: restoredCellState,
             method: 'undo',
             reason: `Reverted ${action.actionType}`,
+            reasonCategory: action.reasonCategory,
+            reasonNote: action.reasonNote,
+            methodContext: action.methodContext
+              ? `Undo of ${action.methodContext}`
+              : `Undo of ${action.method}`,
           })
         })
 

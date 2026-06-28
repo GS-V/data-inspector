@@ -3,7 +3,8 @@ import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { PreviewCell, RawCellValue } from '../types/data'
 import { makeCellId } from '../utils/cellId'
-import { getEffectiveValue, isMissing, toNumber } from '../utils/numeric'
+import { getDisplayValue, getEffectiveValue, isMissing, toNumber } from '../utils/numeric'
+import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
 import { formatNumber, summarizeColumn } from '../utils/stats'
 
 export function InspectionTools() {
@@ -22,9 +23,12 @@ export function InspectionTools() {
     clearPreview,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
-  const [thresholdDirection, setThresholdDirection] = useState<'greater' | 'less'>('greater')
+  const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
+  const [rangeMatchMode, setRangeMatchMode] = useState<'inside' | 'outside'>('outside')
   const [rangeMin, setRangeMin] = useState('')
   const [rangeMax, setRangeMax] = useState('')
+  const [lowerPercentile, setLowerPercentile] = useState('1')
+  const [upperPercentile, setUpperPercentile] = useState('99')
   const [zCutoff, setZCutoff] = useState('3')
   const [customColor, setCustomColor] = useState('#a855f7')
   const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null)
@@ -107,38 +111,92 @@ export function InspectionTools() {
   }
 
   function previewThreshold() {
-    const thresholdValue = parseInput(threshold)
-    if (thresholdValue === null) {
-      setMessage('Enter a threshold first.')
+    if (valueFilterMode === 'percentile') {
+      if (!sheet || !selectedColumn) {
+        return
+      }
+
+      const lower = parseInput(lowerPercentile)
+      const upper = parseInput(upperPercentile)
+      if (lower === null || upper === null) {
+        setMessage('Enter valid lower and upper percentiles.')
+        return
+      }
+
+      const values = sheet.rows
+        .map((row, rowIndex) => {
+          const cellId = makeCellId(sheet.name, rowIndex, selectedColumn)
+          return toNumber(getEffectiveValue(row[selectedColumn], cellState[cellId]))
+        })
+        .filter((value): value is number => value !== null)
+
+      const bounds = percentileBounds(values, lower, upper)
+      if (!bounds) {
+        setMessage('Use percentiles from 0 to 100, with the lower value below the upper value.')
+        return
+      }
+
+      buildPreview(`value-filter:percentile:${lower}:${upper}`, 'Value filter', (value) => {
+        if (value === null) {
+          return null
+        }
+
+        return value < bounds.lowerValue || value > bounds.upperValue
+          ? `Extreme value suggested for review: outside P${lower}=${formatNumber(bounds.lowerValue)} to P${upper}=${formatNumber(bounds.upperValue)}`
+          : null
+      })
       return
     }
 
-    buildPreview(`threshold:${thresholdDirection}:${thresholdValue}`, 'Preview threshold', (value) => {
+    if (valueFilterMode === 'range') {
+      const minimum = parseInput(rangeMin)
+      const maximum = parseInput(rangeMax)
+      if (minimum === null || maximum === null) {
+        setMessage('Enter a valid minimum and maximum.')
+        return
+      }
+
+      if (minimum >= maximum) {
+        setMessage('Enter a minimum that is less than the maximum.')
+        return
+      }
+
+      buildPreview(`value-filter:range:${rangeMatchMode}:${minimum}:${maximum}`, 'Value filter', (value) => {
+        if (value === null) {
+          return null
+        }
+
+        const isInsideRange = value >= minimum && value <= maximum
+        const matches = rangeMatchMode === 'inside' ? isInsideRange : !isInsideRange
+
+        if (!matches) {
+          return null
+        }
+
+        return rangeMatchMode === 'inside'
+          ? `Value ${formatNumber(value)} is inside ${minimum} to ${maximum}`
+          : `Value ${formatNumber(value)} is outside ${minimum} to ${maximum}`
+      })
+      return
+    }
+
+    const thresholdValue = parseInput(threshold)
+    if (thresholdValue === null) {
+      setMessage('Enter a valid value first.')
+      return
+    }
+
+    buildPreview(`value-filter:${valueFilterMode}:${thresholdValue}`, 'Value filter', (value) => {
       if (value === null) {
         return null
       }
       const matches =
-        thresholdDirection === 'greater' ? value > thresholdValue : value < thresholdValue
+        valueFilterMode === 'greater' ? value > thresholdValue : value < thresholdValue
       if (!matches) {
         return null
       }
-      return `Value ${formatNumber(value)} is ${thresholdDirection === 'greater' ? 'greater than' : 'less than'} ${thresholdValue}`
+      return `Value ${formatNumber(value)} is ${valueFilterMode === 'greater' ? 'greater than' : 'less than'} ${thresholdValue}`
     })
-  }
-
-  function previewOutsideRange() {
-    const minimum = parseInput(rangeMin)
-    const maximum = parseInput(rangeMax)
-    if (minimum === null || maximum === null || minimum > maximum) {
-      setMessage('Enter a valid minimum and maximum.')
-      return
-    }
-
-    buildPreview(`range:${minimum}:${maximum}`, 'Preview outside range', (value) =>
-      value !== null && (value < minimum || value > maximum)
-        ? `Value ${formatNumber(value)} is outside ${minimum} to ${maximum}`
-        : null,
-    )
   }
 
   function showUnusualValues() {
@@ -179,17 +237,55 @@ export function InspectionTools() {
     )
   }
 
+  function showDuplicateValues() {
+    if (!sheet || !selectedColumn) {
+      return
+    }
+
+    const duplicateKeys = duplicateValueKeys(
+      sheet.rows.map((row, rowIndex) => {
+        const cellId = makeCellId(sheet.name, rowIndex, selectedColumn)
+        return getEffectiveValue(row[selectedColumn], cellState[cellId])
+      }),
+    )
+
+    if (duplicateKeys.size === 0 && activePreviewKey !== 'duplicate-values') {
+      setPreviewCells([])
+      setActivePreviewKey(null)
+      setMessage('No repeated non-empty values found in this column.')
+      return
+    }
+
+    buildPreview('duplicate-values', 'Duplicate values', (_value, effectiveValue) => {
+      const key = getDisplayValue(effectiveValue).trim()
+      return key && duplicateKeys.has(key)
+        ? `Repeated value suggested for review: ${key}`
+        : null
+    })
+  }
+
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
   const distributionLabel = plotType === 'histogram' ? 'Show scatter' : 'Show distribution'
+  const valueFilterButtonLabel =
+    valueFilterMode === 'greater'
+      ? 'Preview greater than value'
+      : valueFilterMode === 'less'
+        ? 'Preview less than value'
+        : valueFilterMode === 'range'
+          ? rangeMatchMode === 'inside'
+            ? 'Preview inside range'
+            : 'Preview outside range'
+          : 'Preview outside percentile range'
 
   return (
-    <section className="panel tools-panel">
-      <div className="panel-title with-tip">
-        <span>Find & Review Values</span>
-        <InfoTip label="Preview finds possible values to inspect. It does not change your data." />
-      </div>
-      <p className="hint tool-intro">Preview suggestions, select values, then apply a highlight.</p>
-      <div className="summary-grid">
+    <details className="panel tools-panel collapsible-panel review-panel" open>
+      <summary className="panel-summary">Find & Review Values</summary>
+      <div className="panel-body">
+        <div className="inline-help-row">
+          <InfoTip label="Preview finds possible values to inspect. It does not change your data." />
+        </div>
+        <p className="hint tool-intro">Preview suggestions, select values, then apply a highlight.</p>
+        <div className="summary-grid">
         <span>Count</span>
         <strong>{summary?.count.toLocaleString() ?? '-'}</strong>
         <span>Missing</span>
@@ -213,11 +309,12 @@ export function InspectionTools() {
       </div>
 
       <div className="workflow-grid">
-        <div className="tool-block">
-          <div className="tool-block-title">
-            <span>Preview Suggestions</span>
-            <InfoTip label="These tools suggest cells to inspect. They do not change your data." />
-          </div>
+        <details className="tool-block collapsible-tool" open>
+          <summary className="tool-block-summary">Preview Suggestions</summary>
+          <div className="tool-block-body">
+            <div className="inline-help-row">
+              <InfoTip label="These tools suggest cells to inspect. They do not change your data." />
+            </div>
           <div className="auto-tool-grid">
             <button
               type="button"
@@ -230,21 +327,21 @@ export function InspectionTools() {
             </button>
             <button
               type="button"
-              onClick={showZScoreOutliers}
-              disabled={!sheet}
-              title="Finds values unusually far from the column average. Method: z-score."
-            >
-              <span className="button-icon" aria-hidden="true">▥</span>
-              Far from average
-            </button>
-            <button
-              type="button"
               onClick={showMissingValues}
               disabled={!sheet}
               title="Finds blank or missing values in the selected column."
             >
               <span className="button-icon" aria-hidden="true">□</span>
               Missing values
+            </button>
+            <button
+              type="button"
+              onClick={showDuplicateValues}
+              disabled={!sheet}
+              title="Finds repeated non-empty values in this column. Most useful for ID, sample, plot, or record columns."
+            >
+              <span className="button-icon" aria-hidden="true">≡</span>
+              Duplicate values
             </button>
             <button
               type="button"
@@ -260,52 +357,92 @@ export function InspectionTools() {
               {distributionLabel}
             </button>
           </div>
-          <div className="z-cutoff-row">
+          <div className="z-preview-row" aria-label="Far from average preview settings">
+            <button
+              type="button"
+              onClick={showZScoreOutliers}
+              disabled={!sheet}
+              title="Finds values unusually far from the column average. Method: z-score."
+            >
+              <span className="button-icon" aria-hidden="true">▥</span>
+              Far from average
+            </button>
             <label className="mini-field">
               <span>Z cutoff</span>
               <input value={zCutoff} onChange={(event) => setZCutoff(event.target.value)} placeholder="3" />
             </label>
           </div>
-        </div>
-
-        <div className="tool-block">
-          <div className="tool-block-title">
-            <span>Threshold Filter</span>
-            <InfoTip label="Finds values greater than or less than the threshold you enter." />
           </div>
-          <div className="threshold-row">
-            <input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder="Threshold" />
+        </details>
+
+        <details className="tool-block collapsible-tool" open>
+          <summary className="tool-block-summary">Value filter</summary>
+          <div className="tool-block-body">
+          <div className="inline-help-row">
+            <InfoTip label="Preview values using a greater than, less than, or range rule." />
+          </div>
+          <p className="hint compact-help">Preview values using a greater than, less than, or range rule.</p>
+          <div
+            className={`threshold-row ${
+              valueFilterMode === 'range'
+                ? 'range-mode'
+                : valueFilterMode === 'percentile'
+                  ? 'percentile-mode'
+                  : ''
+            }`}
+          >
             <select
-              value={thresholdDirection}
-              onChange={(event) => setThresholdDirection(event.target.value as 'greater' | 'less')}
-              aria-label="Threshold direction"
+              value={valueFilterMode}
+              onChange={(event) =>
+                setValueFilterMode(event.target.value as 'greater' | 'less' | 'range' | 'percentile')
+              }
+              aria-label="Value filter rule"
             >
               <option value="greater">Greater than</option>
               <option value="less">Less than</option>
+              <option value="range">Range</option>
+              <option value="percentile">Percentile</option>
             </select>
+            {valueFilterMode === 'range' ? (
+              <>
+                <input value={rangeMin} onChange={(event) => setRangeMin(event.target.value)} placeholder="Min" />
+                <input value={rangeMax} onChange={(event) => setRangeMax(event.target.value)} placeholder="Max" />
+                <select
+                  value={rangeMatchMode}
+                  onChange={(event) => setRangeMatchMode(event.target.value as 'inside' | 'outside')}
+                  aria-label="Range preview mode"
+                >
+                  <option value="inside">Inside range</option>
+                  <option value="outside">Outside range</option>
+                </select>
+              </>
+            ) : valueFilterMode === 'percentile' ? (
+              <>
+                <input
+                  value={lowerPercentile}
+                  onChange={(event) => setLowerPercentile(event.target.value)}
+                  placeholder="Lower percentile"
+                />
+                <input
+                  value={upperPercentile}
+                  onChange={(event) => setUpperPercentile(event.target.value)}
+                  placeholder="Upper percentile"
+                />
+              </>
+            ) : (
+              <input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder="Value" />
+            )}
             <button type="button" onClick={previewThreshold} disabled={!sheet}>
-              Preview
+              {valueFilterButtonLabel}
             </button>
           </div>
-        </div>
-
-        <div className="tool-block">
-          <div className="tool-block-title">
-            <span>Range Filter</span>
-            <InfoTip label="Finds values below the minimum or above the maximum." />
           </div>
-          <div className="range-row">
-            <input value={rangeMin} onChange={(event) => setRangeMin(event.target.value)} placeholder="Min" />
-            <input value={rangeMax} onChange={(event) => setRangeMax(event.target.value)} placeholder="Max" />
-            <button type="button" onClick={previewOutsideRange} disabled={!sheet}>
-              Preview outside range
-            </button>
-          </div>
-        </div>
+        </details>
 
-        <div className="tool-block highlight-block">
-          <div className="tool-block-title">
-            <span>Apply Highlight</span>
+        <details className="tool-block highlight-block collapsible-tool" open>
+          <summary className="tool-block-summary">Apply Highlight</summary>
+          <div className="tool-block-body">
+          <div className="inline-help-row">
             <InfoTip label="Highlights are persistent review decisions. They stay visible until Remove highlight is used." />
           </div>
           <div className="mark-grid">
@@ -354,7 +491,7 @@ export function InspectionTools() {
                 title="Applies the chosen custom color as a persistent highlight."
               >
                 <span className="button-icon" aria-hidden="true">◇</span>
-                Custom highlight
+                Custom
               </button>
             </div>
             <button
@@ -367,9 +504,11 @@ export function InspectionTools() {
               Remove highlight
             </button>
           </div>
-        </div>
+          </div>
+        </details>
       </div>
       {message ? <p className="hint">{message}</p> : null}
-    </section>
+      </div>
+    </details>
   )
 }

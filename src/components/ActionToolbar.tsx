@@ -1,13 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
+import type { AuditReasonInput } from '../store/useDataInspectorStore'
 import type { CellMark } from '../types/data'
+import { hasCompleteAuditReason } from '../utils/auditReason'
 import { makeCellId } from '../utils/cellId'
 import { buildAuditLogCsv, buildCleanedCsv, downloadCsv, downloadHighlightedXlsxWorkbook } from '../utils/exportCsv'
 import { findNumericColumns } from '../utils/numeric'
 
 type ExportType = 'csv' | 'xlsx'
 type ExportStatus = 'idle' | 'preparing' | 'applying' | 'creating' | 'ready' | 'failed'
+type PendingCleaningAction =
+  | { kind: 'replace'; value: string | number; count: number }
+  | { kind: 'blankSelected'; count: number }
+  | { kind: 'blankProblem'; count: number }
+  | { kind: 'blankReview'; count: number }
+
+const reasonCategories = [
+  'Measurement error',
+  'Data entry issue',
+  'Sensor/image artifact',
+  'Out of expected range',
+  'Duplicate value',
+  'Other',
+]
 
 function fileStem(fileName: string | undefined): string {
   return (fileName ?? 'data-inspector').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-')
@@ -65,6 +81,10 @@ export function ActionToolbar() {
   } = useDataInspectorStore()
   const [replacementValue, setReplacementValue] = useState('')
   const [replacementMessage, setReplacementMessage] = useState('')
+  const [reasonCategory, setReasonCategory] = useState('')
+  const [reasonNote, setReasonNote] = useState('')
+  const [pendingAction, setPendingAction] = useState<PendingCleaningAction | null>(null)
+  const [reasonError, setReasonError] = useState('')
   const [exportType, setExportType] = useState<ExportType>('csv')
   const [exportNameDraft, setExportNameDraft] = useState<{ sourceFileName?: string; value: string }>({
     sourceFileName: undefined,
@@ -76,7 +96,6 @@ export function ActionToolbar() {
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
   const selectedCount = Object.keys(selectedCells).length
-  const isXlsxSource = workbook?.fileName.toLowerCase().endsWith('.xlsx') || workbook?.fileName.toLowerCase().endsWith('.xls')
   const exportName =
     exportNameDraft.sourceFileName === workbook?.fileName
       ? exportNameDraft.value
@@ -124,6 +143,34 @@ export function ActionToolbar() {
     return { sheetCounts: nextSheetCounts, selectedColumnCounts: nextSelectedColumnCounts }
   }, [cellState, selectedColumn, sheet])
 
+  const inspectionSummary = useMemo(() => {
+    let highlighted = 0
+    let blanked = 0
+    let modified = 0
+
+    Object.values(cellState).forEach((state) => {
+      if (state.valueOverride === null || state.mark === 'blanked') {
+        blanked += 1
+        return
+      }
+
+      if (Object.prototype.hasOwnProperty.call(state, 'valueOverride')) {
+        modified += 1
+      }
+
+      if (state.mark) {
+        highlighted += 1
+      }
+    })
+
+    return {
+      highlighted,
+      blanked,
+      modified,
+      auditEntries: auditLog.length,
+    }
+  }, [auditLog.length, cellState])
+
   const selectedColumnIsNumeric = useMemo(() => {
     if (!sheet || !selectedColumn) {
       return false
@@ -145,6 +192,108 @@ export function ActionToolbar() {
     return trimmed
   }
 
+  function actionReason(): AuditReasonInput {
+    const previewMethods = Array.from(new Set(Object.values(previewCells).map((cell) => cell.method)))
+    return {
+      reasonCategory: reasonCategory || undefined,
+      reasonNote: reasonNote.trim() || undefined,
+      methodContext:
+        previewMethods.length > 0
+          ? `Acted after preview: ${previewMethods.join(', ')}`
+          : undefined,
+    }
+  }
+
+  function openReasonPrompt(action: PendingCleaningAction) {
+    setPendingAction(action)
+    setReasonCategory('')
+    setReasonNote('')
+    setReasonError('')
+  }
+
+  function closeReasonPrompt() {
+    setPendingAction(null)
+    setReasonCategory('')
+    setReasonNote('')
+    setReasonError('')
+    setReplacementMessage('Action canceled. No values were changed.')
+  }
+
+  function pendingActionLabel(): string {
+    if (!pendingAction) {
+      return ''
+    }
+
+    if (pendingAction.kind === 'replace') {
+      return `Apply replacement to ${pendingAction.count.toLocaleString()} value${pendingAction.count === 1 ? '' : 's'}`
+    }
+
+    if (pendingAction.kind === 'blankSelected') {
+      return `Apply blanking to ${pendingAction.count.toLocaleString()} value${pendingAction.count === 1 ? '' : 's'}`
+    }
+
+    if (pendingAction.kind === 'blankProblem') {
+      return `Apply blanking to ${pendingAction.count.toLocaleString()} problem value${pendingAction.count === 1 ? '' : 's'}`
+    }
+
+    return `Apply blanking to ${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'}`
+  }
+
+  function pendingActionHelper(): string {
+    if (!pendingAction) {
+      return ''
+    }
+
+    if (pendingAction.kind === 'replace') {
+      return `Selected values will use "${String(pendingAction.value)}" in the cleaned export. Raw data stays unchanged.`
+    }
+
+    if (pendingAction.kind === 'blankSelected') {
+      return 'Selected and previewed values will be blanked in the cleaned export. Rows are not deleted.'
+    }
+
+    return 'Matching values in the active sheet and selected column will be blanked in the cleaned export. Rows are not deleted.'
+  }
+
+  function confirmReasonPrompt() {
+    if (!pendingAction) {
+      return
+    }
+
+    if (!hasCompleteAuditReason(reasonCategory, reasonNote)) {
+      setReasonError('Choose a reason category and add a note before applying this change.')
+      return
+    }
+
+    const reason = actionReason()
+    if (pendingAction.kind === 'replace') {
+      replaceSelectedTargets(pendingAction.value, reason)
+      setReplacementMessage(
+        `Replacement applied to ${pendingAction.count.toLocaleString()} selected value${pendingAction.count === 1 ? '' : 's'}.`,
+      )
+    } else if (pendingAction.kind === 'blankSelected') {
+      blankSelectedTargets(reason)
+      setReplacementMessage(
+        `${pendingAction.count.toLocaleString()} selected or previewed value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else if (pendingAction.kind === 'blankProblem') {
+      blankMarkedInCurrentColumn('problem', reason)
+      setReplacementMessage(
+        `${pendingAction.count.toLocaleString()} problem value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else {
+      blankMarkedInCurrentColumn('review', reason)
+      setReplacementMessage(
+        `${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    }
+
+    setPendingAction(null)
+    setReasonCategory('')
+    setReasonNote('')
+    setReasonError('')
+  }
+
   function handleReplaceSelected() {
     const parsedValue = parseReplacementValue()
     if (parsedValue === null) {
@@ -157,10 +306,7 @@ export function ActionToolbar() {
       return
     }
 
-    replaceSelectedTargets(parsedValue)
-    setReplacementMessage(
-      `Replacement applied to ${selectedCount.toLocaleString()} selected value${selectedCount === 1 ? '' : 's'}.`,
-    )
+    openReasonPrompt({ kind: 'replace', value: parsedValue, count: selectedCount })
   }
 
   function safeExportName(): string {
@@ -265,6 +411,9 @@ export function ActionToolbar() {
           help="Replacements and blanking affect cleaned exports only. Raw data stays unchanged and rows are never deleted."
         />
         <div className="button-group">
+          <p className="audit-cue">
+            Cleaning actions require a reason. The reason is saved only in the Audit Log CSV.
+          </p>
           <label className="field replacement-field">
             <span>New value</span>
             <input
@@ -290,7 +439,7 @@ export function ActionToolbar() {
           <button
             type="button"
             className="danger-soft"
-            onClick={blankSelectedTargets}
+            onClick={() => openReasonPrompt({ kind: 'blankSelected', count: targetCount })}
             disabled={targetCount === 0}
             title="Selected or previewed values become blank in the cleaned export. Rows are not deleted."
           >
@@ -299,7 +448,9 @@ export function ActionToolbar() {
           </button>
           <button
             type="button"
-            onClick={() => blankMarkedInCurrentColumn('problem')}
+            onClick={() =>
+              openReasonPrompt({ kind: 'blankProblem', count: selectedColumnCounts.problem })
+            }
             disabled={selectedColumnCounts.problem === 0}
             title="Replaces all red Problem cells in the current sheet and selected column with blank in the cleaned export."
           >
@@ -308,7 +459,9 @@ export function ActionToolbar() {
           </button>
           <button
             type="button"
-            onClick={() => blankMarkedInCurrentColumn('review')}
+            onClick={() =>
+              openReasonPrompt({ kind: 'blankReview', count: selectedColumnCounts.review })
+            }
             disabled={selectedColumnCounts.review === 0}
             title="Replaces all yellow Review cells in the current sheet and selected column with blank in the cleaned export."
           >
@@ -328,52 +481,132 @@ export function ActionToolbar() {
       </section>
 
       <section className="action-section">
-        <SectionHeader
-          title="Export"
-          help="CSV exports values only. XLSX exports a workbook with blanked values and highlight colors applied."
-        />
-        <label className="field export-field">
-          <span>File name</span>
-          <input
-            value={exportName}
-            onChange={(event) =>
-              setExportNameDraft({ sourceFileName: workbook?.fileName, value: event.target.value })
-            }
-            placeholder="data-inspector"
-            aria-label="Export file name"
-          />
-        </label>
-        <label className="field export-field">
-          <span>Format</span>
-          <select value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)}>
-            <option value="csv">CSV</option>
-            <option value="xlsx">XLSX</option>
-          </select>
-        </label>
-        <button type="button" className="primary-action" onClick={handleDataExport} disabled={isExportDisabled}>
-          <span className="button-icon" aria-hidden="true">⇩</span>
-          Export
-        </button>
-        <button
-          type="button"
-          onClick={handleAuditExport}
-          disabled={auditLog.length === 0}
-          title="Exports highlights, blanks, removals, and undo actions as a separate audit file."
-        >
-          <span className="button-icon" aria-hidden="true">▤</span>
-          Export Audit Log CSV
-        </button>
-        {statusText ? (
-          <p className={exportStatus === 'failed' ? 'error-text export-status' : 'hint export-status'}>
-            {statusText}
-          </p>
-        ) : null}
-        <p className="hint export-note">
-          {isXlsxSource
-            ? 'CSV exports the active sheet with blanked values applied and no colors. XLSX exports the workbook with blanked values and highlight colors applied. Audit Log CSV is separate.'
-            : 'CSV exports the active sheet with blanked values applied and no colors. XLSX creates a workbook with blanked values and highlight colors applied. Audit Log CSV is separate.'}
-        </p>
+        <SectionHeader title="Inspection Summary" />
+        <div className="export-summary" aria-label="Inspection Summary">
+          <div className="export-summary-grid">
+            <span>Blanked values</span>
+            <strong>{inspectionSummary.blanked.toLocaleString()}</strong>
+            <span>Replaced values</span>
+            <strong>{inspectionSummary.modified.toLocaleString()}</strong>
+            <span>Highlighted values</span>
+            <strong>{inspectionSummary.highlighted.toLocaleString()}</strong>
+            <span>Audit entries</span>
+            <strong>{inspectionSummary.auditEntries.toLocaleString()}</strong>
+          </div>
+          <p className="hint">Before closing, export your cleaned file and audit log.</p>
+        </div>
       </section>
+
+      <details className="action-section collapsible-section">
+        <summary className="action-section-summary">Export</summary>
+        <div className="action-section-body">
+          <div className="inline-help-row">
+            <InfoTip label="CSV exports values only. XLSX exports a workbook with blanked values and highlight colors applied." />
+          </div>
+          <label className="field export-field">
+            <span>File name</span>
+            <input
+              value={exportName}
+              onChange={(event) =>
+                setExportNameDraft({ sourceFileName: workbook?.fileName, value: event.target.value })
+              }
+              placeholder="data-inspector"
+              aria-label="Export file name"
+            />
+          </label>
+          <label className="field export-field">
+            <span>Format</span>
+            <select value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)}>
+              <option value="csv">CSV</option>
+              <option value="xlsx">XLSX</option>
+            </select>
+          </label>
+          <button type="button" className="primary-action" onClick={handleDataExport} disabled={isExportDisabled}>
+            <span className="button-icon" aria-hidden="true">⇩</span>
+            Export
+          </button>
+          <button
+            type="button"
+            onClick={handleAuditExport}
+            disabled={auditLog.length === 0}
+            title="Exports highlights, blanks, removals, and undo actions as a separate audit file."
+          >
+            <span className="button-icon" aria-hidden="true">▤</span>
+            Export Audit Log CSV
+          </button>
+          {statusText ? (
+            <p className={exportStatus === 'failed' ? 'error-text export-status' : 'hint export-status'}>
+              {statusText}
+            </p>
+          ) : null}
+          <p className="hint export-note">CSV = active sheet. XLSX = workbook with highlights. Audit Log CSV = review history.</p>
+        </div>
+      </details>
+      {pendingAction ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="reason-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reason-dialog-title"
+          >
+            <div className="reason-modal-header">
+              <div>
+                <h2 id="reason-dialog-title">Reason for change</h2>
+                <p>Please explain this change before applying it. This reason will be saved in the audit log.</p>
+              </div>
+            </div>
+            <div className="reason-modal-action">{pendingActionLabel()}</div>
+            <p className="reason-modal-helper">{pendingActionHelper()}</p>
+            <label className="field">
+              <span>Reason category</span>
+              <select
+                value={reasonCategory}
+                onChange={(event) => {
+                  setReasonCategory(event.target.value)
+                  setReasonError('')
+                }}
+                aria-label="Reason category"
+              >
+                <option value="">Choose a reason</option>
+                {reasonCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Note</span>
+              <textarea
+                value={reasonNote}
+                onChange={(event) => {
+                  setReasonNote(event.target.value)
+                  setReasonError('')
+                }}
+                rows={4}
+                placeholder="Why are you changing this value?"
+                aria-label="Reason note"
+                autoFocus
+              />
+            </label>
+            {reasonError ? <p className="error-text">{reasonError}</p> : null}
+            <div className="modal-actions">
+              <button type="button" onClick={closeReasonPrompt}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={confirmReasonPrompt}
+                disabled={!hasCompleteAuditReason(reasonCategory, reasonNote)}
+              >
+                Apply change
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   )
 }

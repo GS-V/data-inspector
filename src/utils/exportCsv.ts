@@ -157,11 +157,10 @@ function downloadBlob(fileName: string, blob: Blob) {
   URL.revokeObjectURL(url)
 }
 
-export async function downloadHighlightedXlsxWorkbook(
-  fileName: string,
+export async function buildHighlightedXlsxWorkbookBuffer(
   workbookData: WorkbookData,
   cellState: Record<string, CellState>,
-) {
+): Promise<ExcelJS.Buffer> {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Data Inspector'
   workbook.created = new Date()
@@ -191,7 +190,15 @@ export async function downloadHighlightedXlsxWorkbook(
     })
   })
 
-  const buffer = await workbook.xlsx.writeBuffer()
+  return workbook.xlsx.writeBuffer()
+}
+
+export async function downloadHighlightedXlsxWorkbook(
+  fileName: string,
+  workbookData: WorkbookData,
+  cellState: Record<string, CellState>,
+) {
+  const buffer = await buildHighlightedXlsxWorkbookBuffer(workbookData, cellState)
   downloadBlob(
     fileName,
     new Blob([buffer], {
@@ -202,28 +209,43 @@ export async function downloadHighlightedXlsxWorkbook(
 
 export function buildAuditLogCsv(auditLog: AuditAction[]): string {
   const columns = [
-    'id',
-    'timestamp',
-    'groupId',
-    'actionType',
-    'sheetName',
-    'rowIndex',
-    'columnName',
-    'cellId',
-    'oldValue',
-    'newValue',
-    'oldCellState',
-    'newCellState',
-    'method',
-    'reason',
+    'ID',
+    'Timestamp',
+    'Group ID',
+    'Action Type',
+    'Method',
+    'Method Context',
+    'Reason Category',
+    'Reason Note',
+    'Reason Summary',
+    'Sheet',
+    'Row',
+    'Column',
+    'Cell ID',
+    'Old Value',
+    'New Value',
+    'Old Cell State',
+    'New Cell State',
   ]
 
   const rows = auditLog.map((action) => ({
-    ...action,
-    oldValue: getDisplayValue(action.oldValue),
-    newValue: getDisplayValue(action.newValue),
-    oldCellState: action.oldCellState ? JSON.stringify(action.oldCellState) : '',
-    newCellState: action.newCellState ? JSON.stringify(action.newCellState) : '',
+    ID: action.id,
+    Timestamp: action.timestamp,
+    'Group ID': action.groupId,
+    'Action Type': action.actionType,
+    Method: action.method,
+    'Method Context': action.methodContext ?? '',
+    'Reason Category': action.reasonCategory ?? '',
+    'Reason Note': action.reasonNote ?? '',
+    'Reason Summary': action.reason,
+    Sheet: action.sheetName,
+    Row: action.rowIndex,
+    Column: action.columnName,
+    'Cell ID': action.cellId,
+    'Old Value': getDisplayValue(action.oldValue),
+    'New Value': getDisplayValue(action.newValue),
+    'Old Cell State': action.oldCellState ? JSON.stringify(action.oldCellState) : '',
+    'New Cell State': action.newCellState ? JSON.stringify(action.newCellState) : '',
   }))
 
   return rowsToCsv(rows, columns)

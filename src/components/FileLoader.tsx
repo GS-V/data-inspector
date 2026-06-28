@@ -74,7 +74,7 @@ export function FileLoader() {
         </label>
         <p className="privacy-note">
           Files stay in this browser. Nothing is uploaded.
-          <InfoTip label="Files stay in this browser. Export your cleaned file when you are done." />
+          <InfoTip label="Large files may be rejected for browser safety. Export your cleaned file when you are done." />
         </p>
       </div>
       <div className="file-status">

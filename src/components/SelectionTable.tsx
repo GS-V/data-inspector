@@ -6,7 +6,7 @@ import { makeCellId, parseCellId } from '../utils/cellId'
 import { getDisplayValue, getEffectiveValue } from '../utils/numeric'
 
 export function SelectionTable() {
-  const { workbook, activeSheetName, selectedColumn, selectedCells, previewCells, cellState, toggleSelectedCell } =
+  const { workbook, activeSheetName, selectedColumn, selectedCells, previewCells, cellState, auditLog, toggleSelectedCell } =
     useDataInspectorStore()
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
 
@@ -34,6 +34,9 @@ export function SelectionTable() {
         const rawRow = sheet.rows[rowIndex]
         const state = cellState[cellId]
         const preview = previewCells[cellId]
+        const latestReason = auditLog
+          .filter((action) => action.cellId === cellId && (action.reasonCategory || action.reasonNote))
+          .at(-1)
         const isModified =
           Boolean(state) &&
           Object.prototype.hasOwnProperty.call(state, 'valueOverride') &&
@@ -48,10 +51,12 @@ export function SelectionTable() {
           isSelected: Boolean(selectedCells[cellId]),
           previewMethod: preview?.method ?? '',
           previewReason: preview?.reason ?? '',
+          reasonCategory: latestReason?.reasonCategory ?? '',
+          reasonNote: latestReason?.reasonNote ?? '',
         }
       })
       .sort((first, second) => first.rowIndex - second.rowIndex)
-  }, [cellState, previewCells, selectedCells, selectedColumn, sheet])
+  }, [auditLog, cellState, previewCells, selectedCells, selectedColumn, sheet])
 
   function markClass(mark: string) {
     return mark ? `mark-pill ${mark}` : 'mark-pill empty'
@@ -144,7 +149,14 @@ export function SelectionTable() {
                           </span>
                         ) : null}
                         {row.isModified ? <span className="mark-pill modified">Modified</span> : null}
-                        {!row.mark && !row.isModified ? <span className="mark-pill empty">-</span> : null}
+                        {row.reasonCategory ? (
+                          <span className="mark-pill reason" title={row.reasonNote || row.reasonCategory}>
+                            {row.reasonCategory}
+                          </span>
+                        ) : null}
+                        {!row.mark && !row.isModified && !row.reasonCategory ? (
+                          <span className="mark-pill empty">-</span>
+                        ) : null}
                       </span>
                     </td>
                     <td>

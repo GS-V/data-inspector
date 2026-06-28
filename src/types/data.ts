@@ -52,6 +52,9 @@ export type AuditAction = {
   newCellState?: CellState
   method: string
   reason: string
+  reasonCategory?: string
+  reasonNote?: string
+  methodContext?: string
 }
 
 export type PreviewCell = {

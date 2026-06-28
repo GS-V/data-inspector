@@ -78,8 +78,33 @@ function App() {
       <div className="workspace-grid">
         <div className="left-column">
           <FileLoader />
+          <section className="panel guidance-panel">
+            <details>
+              <summary>How this works</summary>
+              <ol>
+                <li>Load a CSV or Excel file.</li>
+                <li>Choose a sheet and value column.</li>
+                <li>Preview values that may need review.</li>
+                <li>Select points or rows.</li>
+                <li>Highlight, blank, or replace values.</li>
+                <li>Add a reason when changing data.</li>
+                <li>Export cleaned data and the audit log.</li>
+              </ol>
+            </details>
+          </section>
           <InspectorControls />
           <InspectionTools />
+          <section className="panel guidance-panel privacy-panel">
+            <details>
+              <summary>Privacy & safety</summary>
+              <ul>
+                <li>Files stay in your browser. Nothing is uploaded.</li>
+                <li>Large files may be rejected for browser safety.</li>
+                <li>Export your cleaned file and audit log before closing.</li>
+                <li>This is an early testing version.</li>
+              </ul>
+            </details>
+          </section>
         </div>
 
         <div className="main-column">
