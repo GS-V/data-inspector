@@ -465,12 +465,6 @@ button:disabled {
   align-items: start;
 }
 
-.preview-column,
-.highlight-column {
-  display: grid;
-  gap: 10px;
-}
-
 .workflow-grid .tool-block {
   padding: 10px;
   border: 1px solid var(--border);
@@ -493,22 +487,13 @@ button:disabled {
   font-weight: 800;
 }
 
-.threshold-row,
-.range-row {
+.threshold-row {
   display: grid;
   gap: 7px;
-}
-
-.threshold-row {
   grid-template-columns: 1fr 1fr;
 }
 
-.range-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-.threshold-row button,
-.range-row button {
+.threshold-row button {
   grid-column: 1 / -1;
 }
 
@@ -523,8 +508,7 @@ button:disabled {
 }
 
 .auto-tool-grid button,
-.threshold-row button,
-.range-row button {
+.threshold-row button {
   justify-content: flex-start;
   min-height: 40px;
   text-align: left;
@@ -538,19 +522,6 @@ button:disabled {
   color: var(--muted-text);
   font-size: 12px;
   font-weight: 700;
-}
-
-.percentile-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.percentile-row button {
-  grid-column: 1 / -1;
-  justify-content: flex-start;
-  min-height: 36px;
-  text-align: left;
 }
 
 .summary-grid span {
@@ -702,45 +673,16 @@ button:disabled {
 }
 
 .button-group,
-.mark-grid,
-.compact-button-row {
+.mark-grid {
   display: grid;
   gap: 8px;
-}
-
-.reason-box {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-subtle);
-}
-
-.reason-box .field {
-  margin-bottom: 0;
-}
-
-.reason-box-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--strong-text);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .mark-grid {
   grid-template-columns: 1fr;
 }
 
-.compact-button-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-.mark-grid button,
-.compact-button-row button {
+.mark-grid button {
   justify-content: flex-start;
   min-height: 34px;
 }
@@ -809,7 +751,6 @@ button:disabled {
   line-height: 1.35;
 }
 
-.action-reason-note,
 .audit-cue {
   margin: 0;
   line-height: 1.35;
@@ -830,12 +771,6 @@ button:disabled {
   gap: 8px;
   margin-bottom: 0;
   padding: 0;
-}
-
-.export-summary-title {
-  color: var(--strong-text);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .export-summary-grid {
@@ -1259,16 +1194,12 @@ button {
 }
 
 .auto-tool-grid button,
-.threshold-row button,
-.range-row button,
-.percentile-row button {
+.threshold-row button {
   min-height: 34px;
   line-height: 1.2;
 }
 
-.threshold-row,
-.range-row,
-.percentile-row {
+.threshold-row {
   gap: 6px;
 }
 
@@ -1279,13 +1210,11 @@ button {
 }
 
 .mark-grid,
-.button-group,
-.compact-button-row {
+.button-group {
   gap: 6px;
 }
 
 .mark-grid button,
-.compact-button-row button,
 .button-group button {
   min-height: 31px;
 }
@@ -1586,20 +1515,14 @@ button {
 
 .auto-tool-grid,
 .threshold-row,
-.range-row,
-.percentile-row,
 .mark-grid,
-.button-group,
-.compact-button-row {
+.button-group {
   gap: 5px;
 }
 
 .auto-tool-grid button,
 .threshold-row button,
-.range-row button,
-.percentile-row button,
 .mark-grid button,
-.compact-button-row button,
 .button-group button {
   min-height: 29px;
 }
@@ -1798,12 +1721,10 @@ button {
   padding: 4px 6px;
 }
 
-.percentile-row,
 .threshold-row {
   gap: 4px;
 }
 
-.percentile-row button,
 .threshold-row button {
   min-height: 28px;
   padding-block: 3px;
@@ -1815,8 +1736,7 @@ button {
 
 .mini-field input,
 .threshold-row input,
-.threshold-row select,
-.percentile-row input {
+.threshold-row select {
   min-height: 26px;
 }
 
@@ -2095,12 +2015,9 @@ button {
   }
 
   .threshold-row,
-  .range-row,
-  .percentile-row,
   .auto-tool-grid,
   .mark-grid,
   .workflow-grid,
-  .compact-button-row,
   .controls-panel .field {
     grid-template-columns: 1fr;
   }
