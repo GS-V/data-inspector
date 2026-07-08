@@ -75,13 +75,3 @@ export function findNumericColumns(
   })
 }
 
-export function getColumnEffectiveNumber(
-  sheetName: string,
-  row: RowData,
-  rowIndex: number,
-  columnName: string,
-  cellState: Record<string, CellState>,
-): number | null {
-  const cellId = makeCellId(sheetName, rowIndex, columnName)
-  return toNumber(getEffectiveValue(row[columnName], cellState[cellId]))
-}

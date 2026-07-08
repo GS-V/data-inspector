@@ -82,6 +82,5 @@ export type DistributionSummary = {
 
 export type PlotType = 'scatter' | 'histogram'
 
-export type SelectionMode = 'click' | 'box' | 'lasso'
 
 export const ROW_ORDER_AXIS = '__row_order__'

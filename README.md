@@ -42,14 +42,6 @@ Open [http://localhost:3000](http://localhost:3000).
 
 To stop: `Ctrl+C`, then `docker compose down`.
 
-**Run a pre-built image (no source code needed):**
-
-```bash
-docker run -p 3000:80 ghcr.io/YOUR-ORG/data-inspector:latest
-```
-
-Replace `YOUR-ORG` with the registry path your lab uses. The IT/deployment team can run this single command to host the app on the internal tools page.
-
 **Rebuild after code changes:**
 
 ```bash
@@ -77,28 +69,6 @@ Open [http://localhost:5173](http://localhost:5173).
 npm run build
 npm run preview
 ```
-
----
-
-## Deploying to a Shared / Internal Host
-
-The Docker image is self-contained (Nginx + static files, ~25 MB). To share it:
-
-```bash
-# Build and tag
-docker build -t ghcr.io/YOUR-ORG/data-inspector:v1.0 .
-
-# Push to registry
-docker push ghcr.io/YOUR-ORG/data-inspector:v1.0
-```
-
-Anyone with Docker can then run it with:
-
-```bash
-docker run -p 80:80 ghcr.io/YOUR-ORG/data-inspector:v1.0
-```
-
-For internal hosting, provide your IT team the image name and port. No build environment is needed on their end.
 
 ---
 

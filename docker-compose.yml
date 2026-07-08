@@ -1,22 +1,17 @@
-# docker-compose.yml — convenience wrapper around the Docker image.
-# Lab members run:  docker compose up
-# That's it. No flags to remember.
+# docker-compose.yml
+# Run the app locally:  docker compose up --build
+# Stop:                 docker compose down
 
 services:
   data-inspector:
-    # Build the image from the Dockerfile in this directory.
-    # Once pushed to a registry, swap `build` for `image: ghcr.io/shakoor-lab/data-inspector:latest`
-    # and lab members won't need the source code at all.
     build:
       context: .
       dockerfile: Dockerfile
       target: production
 
-    # Map host port 3000 → container port 80.
+    # Host port 3000 → container port 80
     # Access the app at http://localhost:3000
-    # Change the left number (3000) if that port is in use on your machine.
     ports:
       - "3000:80"
 
-    # Restart automatically if the container crashes (useful for deployed instances)
     restart: unless-stopped
