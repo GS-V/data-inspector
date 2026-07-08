@@ -1,291 +1,254 @@
 # Data Inspector
 
-Data Inspector is a browser-only, privacy-first visual data inspection tool for CSV and XLSX files.
+A browser-only, privacy-first tool for visual inspection and quality control of CSV and XLSX files.
 
-It helps researchers, students, analysts, and educators open a spreadsheet locally, inspect numeric values, preview values that may need review, apply persistent highlights, blank or replace selected values as cleaned-data overlays, and export cleaned data with an audit trail.
+Open a spreadsheet locally, inspect numeric values, flag or clean outliers, and export cleaned data with a full audit trail — without uploading anything to a server.
 
-> Files stay in this browser. Nothing is uploaded.
+> **Files never leave your browser.** There is no backend, no database, and no authentication.
+
+---
 
 ## What It Does
 
-- Opens CSV and XLSX files locally in the browser.
-- Supports multi-sheet XLSX workbooks.
-- Detects numeric columns while preserving text columns.
-- Shows scatter and distribution views for selected value columns.
-- Lets users manually select points on the chart.
-- Previews values suggested for review, including:
-  - outside typical range
-  - far from average
-  - missing values
-  - duplicate values
-  - threshold filters
-  - expected/domain range checks
-  - percentile bounds
-- Applies persistent highlights:
-  - Flag for review
-  - Mark as problem
-  - Mark as accepted
-  - Custom highlight color
-- Supports controlled cleaning overlays:
-  - replace selected values with a new value
-  - replace selected values with blank
-  - replace problem/review values with blank
-- Keeps raw imported data unchanged.
-- Exports cleaned data and audit logs.
-- Warns users before leaving a session with active work.
+- Opens CSV and XLSX files (including multi-sheet workbooks) locally in the browser.
+- Detects numeric columns automatically while preserving text columns.
+- Displays scatter and distribution views for selected value columns.
+- Suggests values for review using configurable tools:
+  - Outside typical range / far from average
+  - Missing or duplicate values
+  - Threshold filters, domain range checks, percentile bounds
+- Applies persistent, labeled highlights (review, problem, accepted, custom color).
+- Supports controlled cleaning overlays — replace or blank selected values without modifying raw data.
+- Exports cleaned CSV/XLSX data and a separate Audit Log CSV.
+- Warns before leaving a session with unsaved work.
+
+---
+
+## Getting Started
+
+### Option A — Docker (recommended for most users)
+
+No Node.js installation required. You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+**Run from source:**
+
+```bash
+git clone <repo-url>
+cd data-inspector
+docker compose up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+To stop: `Ctrl+C`, then `docker compose down`.
+
+**Run a pre-built image (no source code needed):**
+
+```bash
+docker run -p 3000:80 ghcr.io/YOUR-ORG/data-inspector:latest
+```
+
+Replace `YOUR-ORG` with the registry path your lab uses. The IT/deployment team can run this single command to host the app on the internal tools page.
+
+**Rebuild after code changes:**
+
+```bash
+docker compose up --build
+```
+
+Docker caches dependency layers, so rebuilds after source-only changes are fast.
+
+---
+
+### Option B — Local Development (Node.js)
+
+Requires Node.js 18+.
+
+```bash
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+**Production build:**
+
+```bash
+npm run build
+npm run preview
+```
+
+---
+
+## Deploying to a Shared / Internal Host
+
+The Docker image is self-contained (Nginx + static files, ~25 MB). To share it:
+
+```bash
+# Build and tag
+docker build -t ghcr.io/YOUR-ORG/data-inspector:v1.0 .
+
+# Push to registry
+docker push ghcr.io/YOUR-ORG/data-inspector:v1.0
+```
+
+Anyone with Docker can then run it with:
+
+```bash
+docker run -p 80:80 ghcr.io/YOUR-ORG/data-inspector:v1.0
+```
+
+For internal hosting, provide your IT team the image name and port. No build environment is needed on their end.
+
+---
 
 ## Privacy Model
 
-Data Inspector does not use a backend, database, authentication system, or server-side storage.
+Data Inspector has no backend, database, authentication system, or server-side storage.
 
-Uploaded files are parsed in the browser. The app keeps user edits as overlay state instead of modifying the raw imported data.
+All file parsing and state management happen in the browser. The app keeps user edits as an overlay on top of the original imported data — the raw data is never modified.
 
-The app separates:
+The data model separates:
 
-- **Raw data**: the original imported values.
-- **Selection**: temporary active cells selected by the user.
-- **Preview**: temporary suggested cells from review tools.
-- **Cell state**: persistent highlights, blanked values, replacement values, and notes.
-- **Audit log**: action records for review, cleaning, replacement, undo, and export documentation.
+- **Raw data** — original imported values, immutable.
+- **Selection** — temporary active cells chosen by the user.
+- **Preview** — temporary suggested cells from review tools.
+- **Cell state** — persistent highlights, blanked values, replacement values, and notes.
+- **Audit log** — action records for all review, cleaning, replacement, undo, and export events.
 
-## Supported Files
-
-### Input
-
-- `.csv`
-- `.xlsx`
-- Multi-sheet `.xlsx`
-
-### Export
-
-- CSV data export for the active sheet.
-- XLSX workbook export with cleaned values and highlight fills.
-- Audit Log CSV as a separate documentation export.
-
-CSV exports are values-only because CSV cannot store colors. XLSX exports preserve highlights where supported.
+---
 
 ## Core Workflow
 
 1. Open a CSV or XLSX file.
-2. Choose a sheet, value column, X-axis, and plot type.
+2. Choose a sheet, value column, X-axis column, and plot type.
 3. Inspect values visually in the chart.
-4. Use preview tools to suggest values for review.
+4. Use preview tools to surface values for review.
 5. Select points manually or from the Review Queue.
 6. Apply highlights to document review decisions.
 7. Optionally replace or blank selected values.
-8. Add reason/category/note context for cleaning decisions.
-9. Export cleaned CSV/XLSX data and the Audit Log CSV.
+8. Add reason, category, and note context for cleaning decisions.
+9. Export cleaned CSV/XLSX and the Audit Log CSV.
+
+---
+
+## Supported Files
+
+**Input:** `.csv`, `.xlsx`, multi-sheet `.xlsx`
+
+**Export:**
+- **CSV** — active sheet only, values-only (no colors), blanked/replaced values applied.
+- **XLSX** — full workbook with highlight fills, blanked/replaced values applied.
+- **Audit Log CSV** — separate action history with sheet, row, column, old/new value, method, reason, and note fields.
+
+---
 
 ## File-Size Safety
 
-The file loader checks file size before parsing starts. Rejected or canceled files do not replace the current session.
+File size is checked before parsing begins. Rejected or canceled files do not replace the current session.
 
-CSV thresholds:
+| Format | Safe | Warning | High Risk | Rejected |
+|--------|------|---------|-----------|----------|
+| CSV    | ≤ 50 MB | 50–250 MB | 250–500 MB | > 500 MB |
+| XLSX   | ≤ 25 MB | 25–75 MB | 75–100 MB | > 100 MB |
 
-- Up to 50 MB: safe
-- Over 50 MB to 250 MB: warning, confirmation required
-- Over 250 MB to 500 MB: high-risk, confirmation required
-- Over 500 MB: rejected
+Hard ceiling: files over 1 GB are always rejected.
 
-XLSX thresholds:
+On devices with ≤ 4 GB RAM (`navigator.deviceMemory`), thresholds are reduced to 75% of the values above.
 
-- Up to 25 MB: safe
-- Over 25 MB to 75 MB: warning, confirmation required
-- Over 75 MB to 100 MB: high-risk, confirmation required
-- Over 100 MB: rejected
-
-Absolute ceiling:
-
-- Over 1 GB: rejected
-
-On lower-memory devices where `navigator.deviceMemory <= 4`, thresholds are reduced to 75% of the normal values.
-
-## Export Behavior
-
-Data exports preserve the original row and column structure.
-
-CSV export:
-
-- Exports the active sheet only.
-- Applies blanked values as empty cells.
-- Applies manual replacement values.
-- Does not include highlight colors.
-- Does not add metadata, audit columns, helper columns, or extra rows.
-
-XLSX export:
-
-- Exports a workbook.
-- Preserves sheets where supported.
-- Applies blanked values as empty cells.
-- Applies manual replacement values.
-- Applies highlight fills for review/problem/accepted/custom highlights.
-- Does not add audit sheets, metadata sheets, helper columns, or extra rows.
-
-Audit Log CSV:
-
-- Exports action history separately.
-- Includes action metadata such as sheet, row, column, old value, new value, method, reason, reason category, and reason note where available.
+---
 
 ## Tech Stack
 
-- React
-- TypeScript
+- React 19 + TypeScript
 - Vite
 - Zustand
 - Papa Parse
-- SheetJS `xlsx`
-- ExcelJS
+- SheetJS (`xlsx`) + ExcelJS
 - Plotly / react-plotly.js
+- Mantine (UI components)
 - ESLint
+
+---
 
 ## Project Structure
 
 ```text
 src/
-  components/          React UI components
-  store/               Zustand data inspector state
-  types/               Shared TypeScript types
-  utils/               Parsing, export, statistics, review checks, file risk
-scripts/               Lightweight verification and capacity scripts
-docs/                  Project notes and future planning
-public/                Static browser assets
+  components/    React UI components
+  store/         Zustand application state and actions
+  types/         Shared TypeScript types
+  utils/         Parsing, export, statistics, review checks, file risk
+scripts/         Verification and capacity scripts
+docs/            Project documentation and QA checklist
+public/          Static browser assets
 ```
 
-Important files:
+Key files:
 
-- `src/store/useDataInspectorStore.ts` - main application state and actions.
-- `src/components/FileLoader.tsx` - local file loading and file-risk checks.
-- `src/components/InspectorChart.tsx` - chart rendering and point interaction.
-- `src/components/InspectionTools.tsx` - preview and highlight workflow.
-- `src/components/ActionToolbar.tsx` - cleaning, export, and audit actions.
-- `src/components/SelectionTable.tsx` - Review Queue.
-- `src/utils/fileRisk.ts` - file-size safety assessment.
-- `src/utils/exportCsv.ts` - CSV/XLSX/audit export helpers.
-- `src/utils/reviewChecks.ts` - duplicate and percentile review helpers.
+| File | Purpose |
+|------|---------|
+| `src/store/useDataInspectorStore.ts` | Main application state and all actions |
+| `src/components/FileLoader.tsx` | Local file loading and file-risk checks |
+| `src/components/InspectorChart.tsx` | Chart rendering and point interaction |
+| `src/components/InspectionTools.tsx` | Preview and highlight workflow |
+| `src/components/ActionToolbar.tsx` | Cleaning, export, and audit actions |
+| `src/components/SelectionTable.tsx` | Review Queue |
+| `src/utils/fileRisk.ts` | File-size safety assessment |
+| `src/utils/exportCsv.ts` | CSV/XLSX/audit export helpers |
+| `src/utils/reviewChecks.ts` | Duplicate and percentile review helpers |
 
-## Getting Started
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run the development server:
-
-```bash
-npm run dev -- --host 127.0.0.1
-```
-
-Build for production:
-
-```bash
-npm run build
-```
-
-Preview the production build:
-
-```bash
-npm run preview
-```
+---
 
 ## Verification Scripts
 
-Run linting:
-
 ```bash
-npm run lint
+npm run lint                  # ESLint
+npm run test:file-risk        # File-risk threshold checks
+npm run test:review-checks    # Review-check utility tests
+npm run test:store-overlays   # Store overlay logic
+npm run test:exports          # Export correctness checks
+npm run check:capacity        # Synthetic CSV capacity checks
 ```
 
-Run file-risk checks:
+Recommended pre-release run:
 
 ```bash
-npm run test:file-risk
+npm run build && npm run lint && npm run test:file-risk && npm run test:review-checks && npm run test:store-overlays && npm run test:exports && npm run check:capacity
 ```
 
-Run review-check utility tests:
+See [`docs/qa-checklist.md`](docs/qa-checklist.md) for the manual QA checklist.
 
-```bash
-npm run test:review-checks
-```
-
-Run store overlay checks:
-
-```bash
-npm run test:store-overlays
-```
-
-Run export checks:
-
-```bash
-npm run test:exports
-```
-
-Run synthetic CSV capacity checks:
-
-```bash
-npm run check:capacity
-```
-
-Recommended full local verification:
-
-```bash
-npm run build
-npm run lint
-npm run test:file-risk
-npm run test:review-checks
-npm run test:store-overlays
-npm run test:exports
-npm run check:capacity
-```
-
-## Manual QA Checklist
-
-- Load a simple numeric CSV.
-- Load a mixed numeric/text CSV.
-- Load a multi-sheet XLSX file.
-- Confirm text-only columns do not appear as numeric value columns.
-- Preview outside typical range, far from average, missing values, duplicate values, and percentile bounds.
-- Toggle a preview tool on and off.
-- Select and unselect points from the chart.
-- Select rows from the Review Queue.
-- Apply review/problem/accepted/custom highlights.
-- Switch columns and confirm highlights persist when returning.
-- Replace a selected value with a new value.
-- Blank a selected value.
-- Undo the most recent cleaning/highlight action.
-- Hide and show blanked points.
-- Export CSV and confirm blanked/replaced values are correct.
-- Export XLSX and confirm highlight colors and cleaned values are correct.
-- Export Audit Log CSV and confirm actions, reasons, and notes are recorded.
-- Try a file near warning/rejection thresholds and confirm file-risk behavior.
+---
 
 ## Current Limitations
 
-- The app is intended for moderate local files, not very large datasets.
-- XLSX export creates a clean workbook focused on data and highlight fills; it does not preserve every original Excel formatting detail.
-- Preview tools suggest values for review. They do not automatically clean data.
+- Intended for moderate local files, not very large datasets.
+- XLSX export produces a clean workbook focused on data and highlight fills; original Excel formatting details are not preserved.
+- Preview tools suggest values for review — they do not automatically clean data.
 - Data edits are controlled overlays, not full spreadsheet editing.
-- There is no session save/load feature yet.
-- There is no backend, user account, sharing, or cloud storage.
+- No session save/load feature yet.
+- No backend, user accounts, sharing, or cloud storage.
 
-## Roadmap Ideas
-
-Future work may include:
-
-- Better onboarding/help content.
-- Larger-file performance optimization.
-- More export QA across Excel, Numbers, and LibreOffice.
-- Optional sample datasets.
-- More utility tests for statistics, parsing, and exports.
-- Transparent review-priority signals that remain human-in-the-loop.
+---
 
 ## Development Notes
 
 - Keep raw imported data immutable.
 - Store user decisions separately in cell state.
-- Preserve stable cell IDs using `sheetName::rowIndex::columnName`.
+- Stable cell IDs use the format `sheetName::rowIndex::columnName`.
 - Do not delete rows during cleaning.
 - Keep audit log entries readable and exportable.
 - Keep preview suggestions temporary until the user explicitly highlights, blanks, or replaces values.
-- Avoid adding server-side dependencies or workflows.
+- Do not introduce server-side dependencies.
+
+---
+
+## Roadmap
+
+- Better onboarding and help content.
+- Larger-file performance optimization.
+- Export QA across Excel, Numbers, and LibreOffice.
+- Optional sample datasets for onboarding.
+- More utility tests for statistics, parsing, and exports.
+- Transparent review-priority signals that remain human-in-the-loop.

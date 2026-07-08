@@ -1,0 +1,28 @@
+# .dockerignore — tells Docker what NOT to copy into the build context.
+# Keeping the context small speeds up every build significantly.
+
+# Dependencies — Docker installs these fresh from package-lock.json
+node_modules
+
+# Previous builds — Docker will produce a fresh dist/ in the build stage
+dist
+
+# Version control — not needed inside the container
+.git
+.gitignore
+
+# Editor and OS artifacts
+.vscode
+.DS_Store
+*.swp
+
+# Temporary files
+.tmp
+
+# Local env files (never ship secrets inside images)
+.env
+.env.local
+.env.*.local
+
+# Test scripts (not needed in production image)
+scripts/
