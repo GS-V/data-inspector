@@ -1,5 +1,4 @@
 import type { CellState, RawCellValue, RowData } from '../types/data'
-import { makeCellId } from './cellId'
 
 export function isMissing(value: RawCellValue): boolean {
   return value === null || value === undefined || String(value).trim() === ''
