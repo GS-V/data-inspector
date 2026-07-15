@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { AuditAction, CellState, RawCellValue, SheetData, WorkbookData } from '../types/data'
+import type { AuditAction, AuditActionType, CellState, RawCellValue, SheetData, WorkbookData } from '../types/data'
 import { makeCellId } from './cellId'
 import { getDisplayValue, getEffectiveValue } from './numeric'
 
@@ -208,50 +208,64 @@ export async function downloadHighlightedXlsxWorkbook(
 }
 
 export function buildAuditLogCsv(auditLog: AuditAction[]): string {
+  function actionLabel(actionType: AuditActionType, newValue?: unknown): string {
+    switch (actionType) {
+      case 'mark_review': return 'Flagged for review'
+      case 'mark_problem': return 'Marked as problem'
+      case 'mark_keep': return 'Marked as accepted'
+      case 'mark_custom': return 'Custom highlight'
+      case 'clear_mark': return 'Highlight removed'
+      case 'blank_selected':
+      case 'blank_problem':
+      case 'blank_review': return 'Blanked'
+      case 'replace_value':
+        return newValue !== null && newValue !== undefined
+          ? `Replaced with ${String(newValue)}`
+          : 'Replaced'
+      case 'undo': return 'Undone'
+      default: return String(actionType)
+    }
+  }
+
   const columns = [
-    'ID',
     'Timestamp',
-    'Group ID',
-    'Action Type',
-    'Method',
-    'Method Context',
-    'Reason Category',
-    'Reason Note',
-    'Reason Summary',
-    'Sheet',
-    'Row',
+    'Action',
+    'Action Detail',
     'Column',
-    'Cell ID',
+    'Sheet',
+    'Row / Identity',
+    'Row #',
     'Old Value',
     'New Value',
-    'Old Cell State',
-    'New Cell State',
+    'Reason Category',
+    'Reason Note',
+    'Method',
+    'Method Context',
+    'Group ID',
   ]
 
   const rows = auditLog.map((action) => ({
-    ID: action.id,
-    Timestamp: action.timestamp,
-    'Group ID': action.groupId,
-    'Action Type': action.actionType,
-    Method: action.method,
-    'Method Context': action.methodContext ?? '',
-    'Reason Category': action.reasonCategory ?? '',
-    'Reason Note': action.reasonNote ?? '',
-    'Reason Summary': action.reason,
-    Sheet: action.sheetName,
-    Row: action.rowIndex,
+    Timestamp: new Date(action.timestamp).toLocaleString(),
+    Action: actionLabel(action.actionType, action.newValue),
+    'Action Detail': action.reason,
     Column: action.columnName,
-    'Cell ID': action.cellId,
+    Sheet: action.sheetName,
+    'Row / Identity': action.rowIdentifier ?? `Row ${action.rowIndex + 1}`,
+    'Row #': action.rowIndex + 1,
     'Old Value': getDisplayValue(action.oldValue),
     'New Value': getDisplayValue(action.newValue),
-    'Old Cell State': action.oldCellState ? JSON.stringify(action.oldCellState) : '',
-    'New Cell State': action.newCellState ? JSON.stringify(action.newCellState) : '',
+    'Reason Category': action.reasonCategory ?? '',
+    'Reason Note': action.reasonNote ?? '',
+    Method: action.method,
+    'Method Context': action.methodContext ?? '',
+    'Group ID': action.groupId,
   }))
 
   return rowsToCsv(rows, columns)
 }
 
 export function downloadCsv(fileName: string, csv: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  // Prepend UTF-8 BOM so Excel opens the file with correct encoding (avoids garbled non-ASCII chars)
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' })
   downloadBlob(fileName, blob)
 }

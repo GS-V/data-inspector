@@ -357,12 +357,17 @@ export function InspectorChart({ theme }: InspectorChartProps) {
         onClick={(event) => {
           const [cellId] = eventCellIds(event)
           if (cellId) {
+            if (Object.keys(previewCells).length > 0) {
+              clearPreview()
+            }
             toggleSelectedCell(cellId)
           }
         }}
         onSelected={(event) => {
           const cellIds = eventCellIds(event)
           if (cellIds.length > 0) {
+            clearPreview()
+            clearSelection()
             addSelectedCells(cellIds)
             return
           }

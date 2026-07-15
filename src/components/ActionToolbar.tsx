@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AuditLogPanel } from './AuditLogPanel'
 import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { AuditReasonInput } from '../store/useDataInspectorStore'
@@ -92,6 +93,7 @@ export function ActionToolbar() {
   })
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle')
   const [exportError, setExportError] = useState('')
+  const [activeTab, setActiveTab] = useState<'actions' | 'audit'>('actions')
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
@@ -142,34 +144,6 @@ export function ActionToolbar() {
 
     return { sheetCounts: nextSheetCounts, selectedColumnCounts: nextSelectedColumnCounts }
   }, [cellState, selectedColumn, sheet])
-
-  const inspectionSummary = useMemo(() => {
-    let highlighted = 0
-    let blanked = 0
-    let modified = 0
-
-    Object.values(cellState).forEach((state) => {
-      if (state.valueOverride === null || state.mark === 'blanked') {
-        blanked += 1
-        return
-      }
-
-      if (Object.prototype.hasOwnProperty.call(state, 'valueOverride')) {
-        modified += 1
-      }
-
-      if (state.mark) {
-        highlighted += 1
-      }
-    })
-
-    return {
-      highlighted,
-      blanked,
-      modified,
-      auditEntries: auditLog.length,
-    }
-  }, [auditLog.length, cellState])
 
   const selectedColumnIsNumeric = useMemo(() => {
     if (!sheet || !selectedColumn) {
@@ -390,6 +364,31 @@ export function ActionToolbar() {
 
   return (
     <aside className="panel action-panel">
+      <div className="action-tab-bar">
+        <button
+          type="button"
+          className={`action-tab${activeTab === 'actions' ? ' action-tab-active' : ''}`}
+          onClick={() => setActiveTab('actions')}
+        >
+          Actions
+        </button>
+        <button
+          type="button"
+          className={`action-tab${activeTab === 'audit' ? ' action-tab-active' : ''}`}
+          onClick={() => setActiveTab('audit')}
+        >
+          <span className="button-icon" aria-hidden="true">▤</span>
+          Audit log
+          {auditLog.length > 0 && (
+            <span className="action-tab-badge">{auditLog.length}</span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'audit' ? (
+        <AuditLogPanel onExport={handleAuditExport} />
+      ) : (
+      <div className="action-tab-content">
       <div className="panel-title">Actions</div>
 
       <section className="action-section">
@@ -480,68 +479,56 @@ export function ActionToolbar() {
         </div>
       </section>
 
-      <section className="action-section">
-        <SectionHeader title="Inspection Summary" />
-        <div className="export-summary" aria-label="Inspection Summary">
-          <div className="export-summary-grid">
-            <span>Blanked values</span>
-            <strong>{inspectionSummary.blanked.toLocaleString()}</strong>
-            <span>Replaced values</span>
-            <strong>{inspectionSummary.modified.toLocaleString()}</strong>
-            <span>Highlighted values</span>
-            <strong>{inspectionSummary.highlighted.toLocaleString()}</strong>
-            <span>Audit entries</span>
-            <strong>{inspectionSummary.auditEntries.toLocaleString()}</strong>
-          </div>
-          <p className="hint">Before closing, export your cleaned file and audit log.</p>
-        </div>
-      </section>
-
-      <details className="action-section collapsible-section">
-        <summary className="action-section-summary">Export</summary>
-        <div className="action-section-body">
-          <div className="inline-help-row">
-            <InfoTip label="CSV exports values only. XLSX exports a workbook with blanked values and highlight colors applied." />
-          </div>
-          <label className="field export-field">
-            <span>File name</span>
-            <input
-              value={exportName}
-              onChange={(event) =>
-                setExportNameDraft({ sourceFileName: workbook?.fileName, value: event.target.value })
-              }
-              placeholder="data-inspector"
-              aria-label="Export file name"
-            />
-          </label>
-          <label className="field export-field">
-            <span>Format</span>
-            <select value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)}>
-              <option value="csv">CSV</option>
-              <option value="xlsx">XLSX</option>
-            </select>
-          </label>
-          <button type="button" className="primary-action" onClick={handleDataExport} disabled={isExportDisabled}>
+      <section className="action-section export-section">
+        <SectionHeader title="Export" />
+        <div className="export-grid">
+          <input
+            className="export-name-input"
+            value={exportName}
+            onChange={(event) =>
+              setExportNameDraft({ sourceFileName: workbook?.fileName, value: event.target.value })
+            }
+            placeholder="File name"
+            aria-label="Export file name"
+          />
+          <select
+            className="export-format-select"
+            value={exportType}
+            onChange={(event) => setExportType(event.target.value as ExportType)}
+            aria-label="Export format"
+          >
+            <option value="csv">CSV</option>
+            <option value="xlsx">XLSX</option>
+          </select>
+          <button
+            type="button"
+            className="primary-action export-data-btn"
+            onClick={handleDataExport}
+            disabled={isExportDisabled}
+          >
             <span className="button-icon" aria-hidden="true">⇩</span>
-            Export
+            Export data
           </button>
           <button
             type="button"
+            className="export-audit-btn"
             onClick={handleAuditExport}
             disabled={auditLog.length === 0}
             title="Exports highlights, blanks, removals, and undo actions as a separate audit file."
           >
             <span className="button-icon" aria-hidden="true">▤</span>
-            Export Audit Log CSV
+            Export audit log
           </button>
           {statusText ? (
             <p className={exportStatus === 'failed' ? 'error-text export-status' : 'hint export-status'}>
               {statusText}
             </p>
           ) : null}
-          <p className="hint export-note">CSV = active sheet. XLSX = workbook with highlights. Audit Log CSV = review history.</p>
+          <p className="export-info">
+            CSV: active sheet &nbsp;·&nbsp; XLSX: workbook with highlights &nbsp;·&nbsp; Audit log: full change history
+          </p>
         </div>
-      </details>
+      </section>
       {pendingAction ? (
         <div className="modal-backdrop" role="presentation">
           <div
@@ -607,6 +594,8 @@ export function ActionToolbar() {
           </div>
         </div>
       ) : null}
+      </div>
+      )}
     </aside>
   )
 }

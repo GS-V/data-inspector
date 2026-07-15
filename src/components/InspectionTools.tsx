@@ -3,7 +3,7 @@ import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { PreviewCell, RawCellValue } from '../types/data'
 import { makeCellId } from '../utils/cellId'
-import { getDisplayValue, getEffectiveValue, isMissing, toNumber } from '../utils/numeric'
+import { getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
 import { formatNumber, summarizeColumn } from '../utils/stats'
 
@@ -21,6 +21,7 @@ export function InspectionTools() {
     markTargets,
     clearTargetMarks,
     clearPreview,
+    clearSelection,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -85,6 +86,7 @@ export function InspectionTools() {
       })
     })
 
+    clearSelection()
     setPreviewCells(nextPreviewCells)
     setActivePreviewKey(nextPreviewCells.length > 0 ? previewKey : null)
     setMessage(`${nextPreviewCells.length.toLocaleString()} value${nextPreviewCells.length === 1 ? '' : 's'} previewed. Click the same preview again to clear it.`)
@@ -231,12 +233,6 @@ export function InspectionTools() {
     })
   }
 
-  function showMissingValues() {
-    buildPreview('missing-values', 'Missing values', (_value, _effectiveValue, rawValue) =>
-      isMissing(rawValue) ? 'Imported value is blank or missing' : null,
-    )
-  }
-
   function showDuplicateValues() {
     if (!sheet || !selectedColumn) {
       return
@@ -324,15 +320,6 @@ export function InspectionTools() {
             >
               <span className="button-icon" aria-hidden="true">⌁</span>
               Outside typical range
-            </button>
-            <button
-              type="button"
-              onClick={showMissingValues}
-              disabled={!sheet}
-              title="Finds blank or missing values in the selected column."
-            >
-              <span className="button-icon" aria-hidden="true">□</span>
-              Missing values
             </button>
             <button
               type="button"

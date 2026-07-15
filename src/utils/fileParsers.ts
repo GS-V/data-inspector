@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
+import { findIdentifierColumns } from './numeric'
 import type { RowData, SheetData, WorkbookData } from '../types/data'
 
 function uniqueColumns(columns: string[]): string[] {
@@ -60,9 +61,10 @@ async function parseCsv(file: File): Promise<WorkbookData> {
     return `${error.message}${rowText}`
   })
 
+  const csvIdentifierColumns = findIdentifierColumns(rows, columns)
   return {
     fileName: file.name,
-    sheets: [{ name: 'CSV', columns, rows }],
+    sheets: [{ name: 'CSV', columns, rows, identifierColumns: csvIdentifierColumns }],
     parseWarnings,
   }
 }
@@ -91,7 +93,8 @@ async function parseXlsx(file: File): Promise<WorkbookData> {
       return row
     })
 
-    return { name: sheetName, columns, rows }
+    const identifierColumns = findIdentifierColumns(rows, columns)
+    return { name: sheetName, columns, rows, identifierColumns }
   })
 
   return { fileName: file.name, sheets }

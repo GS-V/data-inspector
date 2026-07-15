@@ -13,7 +13,7 @@ import type {
 } from '../types/data'
 import { ROW_ORDER_AXIS } from '../types/data'
 import { makeCellId, parseCellId } from '../utils/cellId'
-import { findNumericColumns, getEffectiveValue } from '../utils/numeric'
+import { buildRowIdentifier, findNumericColumns, getEffectiveValue } from '../utils/numeric'
 
 type CellChange = {
   cellId: CellId
@@ -183,6 +183,13 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         delete nextCellState[change.cellId]
       }
 
+      const rowIdentifier = buildRowIdentifier(
+        sheet.rows[rowIndex],
+        rowIndex,
+        sheet.identifierColumns ?? [],
+        oldValue,
+      )
+
       actions.push({
         id: makeId('audit'),
         timestamp,
@@ -201,6 +208,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         reasonCategory: change.reasonCategory,
         reasonNote: change.reasonNote,
         methodContext: change.methodContext,
+        rowIdentifier,
       })
     })
 
@@ -493,6 +501,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             methodContext: action.methodContext
               ? `Undo of ${action.methodContext}`
               : `Undo of ${action.method}`,
+            rowIdentifier: action.rowIdentifier,
           })
         })
 

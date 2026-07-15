@@ -6,6 +6,7 @@ export type SheetData = {
   name: string
   columns: string[]
   rows: RowData[]
+  identifierColumns: string[]
 }
 
 export type WorkbookData = {
@@ -55,6 +56,7 @@ export type AuditAction = {
   reasonCategory?: string
   reasonNote?: string
   methodContext?: string
+  rowIdentifier: string
 }
 
 export type PreviewCell = {

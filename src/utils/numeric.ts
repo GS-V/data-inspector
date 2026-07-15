@@ -74,3 +74,40 @@ export function findNumericColumns(
   })
 }
 
+
+export function findIdentifierColumns(
+  rows: RowData[],
+  columns: string[],
+): string[] {
+  const numericSet = new Set(findNumericColumns(rows, columns))
+  // Date columns are classified as numeric by toNumber() (returns timestamp ms),
+  // but they are human-readable identifiers — include them regardless.
+  const isDateCol = (col: string) => rows.some((row) => row[col] instanceof Date)
+  return columns.filter((col) => !numericSet.has(col) || isDateCol(col)).slice(0, 3)
+}
+
+export function buildRowIdentifier(
+  row: RowData,
+  rowIndex: number,
+  identifierColumns: string[],
+  oldValue: RawCellValue,
+): string {
+  if (identifierColumns.length > 0) {
+    const parts = identifierColumns
+      .map((col) => {
+        const val = row[col]
+        if (val instanceof Date) {
+          return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        }
+        const str = val !== null && val !== undefined ? String(val).trim() : ''
+        return str || null
+      })
+      .filter((v): v is string => v !== null)
+    if (parts.length > 0) return parts.join(' · ')
+  }
+  const oldStr =
+    oldValue !== null && oldValue !== undefined && String(oldValue).trim()
+      ? ` · was ${String(oldValue).trim()}`
+      : ''
+  return `Row ${rowIndex + 1}${oldStr}`
+}
