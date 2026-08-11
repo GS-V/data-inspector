@@ -9,11 +9,16 @@ import type {
   PreviewCell,
   RawCellValue,
   SheetData,
+  TransformationType,
+  TransformAttempt,
   WorkbookData,
 } from '../types/data'
 import { ROW_ORDER_AXIS } from '../types/data'
+import { getVisibleColumnValues } from '../utils/chartData'
 import { makeCellId, parseCellId } from '../utils/cellId'
 import { buildRowIdentifier, findNumericColumns, getEffectiveValue } from '../utils/numeric'
+import { summarizeNumbers } from '../utils/stats'
+import { calculateSkewness, computeSparkbucket, transformValue } from '../utils/transforms'
 
 type CellChange = {
   cellId: CellId
@@ -43,6 +48,7 @@ type DataInspectorState = {
   cellState: Record<CellId, CellState>
   auditLog: AuditAction[]
   undoStack: AuditAction[][]
+  transformHistory: TransformAttempt[]
   setWorkbook: (workbook: WorkbookData) => void
   setActiveSheetName: (sheetName: string) => void
   setSelectedColumn: (columnName: string) => void
@@ -58,6 +64,11 @@ type DataInspectorState = {
   replaceSelectedTargets: (value: string | number, reasonInput?: AuditReasonInput) => void
   blankSelectedTargets: (reasonInput?: AuditReasonInput) => void
   blankMarkedInCurrentColumn: (mark: 'problem' | 'review', reasonInput?: AuditReasonInput) => void
+  applyColumnTransform: (
+    columnNames: string[],
+    type: TransformationType,
+    params?: { useOffset?: boolean; lambda?: number },
+  ) => { appliedCount: number; skippedCount: number }
   undoLastActionGroup: () => void
 }
 
@@ -124,6 +135,30 @@ function markActionType(mark: Exclude<CellMark, 'blanked'>): AuditActionType {
   }
 
   return 'mark_custom'
+}
+
+function transformActionType(type: TransformationType): AuditActionType {
+  if (type === 'log') return 'transform_log'
+  if (type === 'log10') return 'transform_log10'
+  if (type === 'sqrt') return 'transform_sqrt'
+  if (type === 'boxcox') return 'transform_boxcox'
+  return 'transform_zscore'
+}
+
+function transformMethod(type: TransformationType): string {
+  if (type === 'log') return 'log transform'
+  if (type === 'log10') return 'log10 transform'
+  if (type === 'sqrt') return 'square root transform'
+  if (type === 'boxcox') return 'box-cox transform'
+  return 'z-score transform'
+}
+
+function transformReason(type: TransformationType, columnName: string, lambda?: number): string {
+  if (type === 'log') return `Applied natural log transformation to column ${columnName}`
+  if (type === 'log10') return `Applied log10 transformation to column ${columnName}`
+  if (type === 'sqrt') return `Applied square root transformation to column ${columnName}`
+  if (type === 'boxcox') return `Applied Box-Cox transformation (λ=${(lambda ?? 1).toFixed(2)}) to column ${columnName}`
+  return `Applied z-score transformation to column ${columnName}`
 }
 
 function normalizeReasonInput(reasonInput?: AuditReasonInput): AuditReasonInput {
@@ -249,6 +284,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     cellState: {},
     auditLog: [],
     undoStack: [],
+    transformHistory: [],
 
     setWorkbook: (workbook) => {
       const firstSheet = workbook.sheets[0]
@@ -264,6 +300,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         cellState: {},
         auditLog: [],
         undoStack: [],
+        transformHistory: [],
       })
     },
 
@@ -448,6 +485,90 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         })
 
       applyCellChanges(changes)
+    },
+
+    applyColumnTransform: (columnNames, type, params) => {
+      const state = get()
+      const sheet = getSheet(state.workbook, state.activeSheetName)
+      if (!sheet || columnNames.length === 0) {
+        return { appliedCount: 0, skippedCount: 0 }
+      }
+
+      const beforeValues = columnNames.flatMap(
+        (columnName) => getVisibleColumnValues(sheet, columnName, state.cellState).map((entry) => entry.value),
+      )
+
+      const lambda = params?.lambda ?? 1
+      const changes: CellChange[] = []
+      let appliedCount = 0
+      let skippedCount = 0
+
+      columnNames.forEach((columnName) => {
+        const entries = getVisibleColumnValues(sheet, columnName, state.cellState)
+        const columnValues = entries.map((entry) => entry.value)
+        const mean =
+          columnValues.length > 0 ? columnValues.reduce((sum, value) => sum + value, 0) / columnValues.length : undefined
+        const sd =
+          mean !== undefined && columnValues.length > 1
+            ? Math.sqrt(columnValues.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (columnValues.length - 1))
+            : undefined
+
+        entries.forEach((entry) => {
+          const transformed = transformValue(entry.value, type, {
+            useOffset: params?.useOffset,
+            lambda,
+            mean,
+            sd,
+          })
+
+          if (transformed === null || !Number.isFinite(transformed)) {
+            skippedCount += 1
+            return
+          }
+
+          const nextState = {
+            ...(state.cellState[entry.cellId] ?? {}),
+            valueOverride: transformed,
+          }
+          if (nextState.mark === 'blanked') {
+            delete nextState.mark
+          }
+
+          changes.push({
+            cellId: entry.cellId,
+            nextState,
+            actionType: transformActionType(type),
+            method: transformMethod(type),
+            reason: transformReason(type, columnName, lambda),
+          })
+          appliedCount += 1
+        })
+      })
+
+      applyCellChanges(changes)
+
+      const afterState = get()
+      const afterValues = columnNames.flatMap(
+        (columnName) => getVisibleColumnValues(sheet, columnName, afterState.cellState).map((entry) => entry.value),
+      )
+
+      const attempt: TransformAttempt = {
+        id: makeId('transform'),
+        type,
+        columns: columnNames,
+        appliedAt: new Date().toISOString(),
+        lambda: type === 'boxcox' ? lambda : undefined,
+        statsBefore: summarizeNumbers(beforeValues, 0),
+        statsAfter: summarizeNumbers(afterValues, 0),
+        skewnessBefore: calculateSkewness(beforeValues),
+        skewnessAfter: calculateSkewness(afterValues),
+        sparkBefore: computeSparkbucket(beforeValues),
+        sparkAfter: computeSparkbucket(afterValues),
+      }
+
+      set({ transformHistory: [...afterState.transformHistory, attempt] })
+
+      return { appliedCount, skippedCount }
     },
 
     undoLastActionGroup: () => {

@@ -36,6 +36,11 @@ export type AuditActionType =
   | 'blank_problem'
   | 'blank_review'
   | 'replace_value'
+  | 'transform_log'
+  | 'transform_log10'
+  | 'transform_sqrt'
+  | 'transform_boxcox'
+  | 'transform_zscore'
   | 'undo'
 
 export type AuditAction = {
@@ -101,5 +106,20 @@ export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
   { value: 'cdf', label: 'Cumulative distribution' },
 ]
 
+export type TransformationType = 'log' | 'log10' | 'sqrt' | 'boxcox' | 'zscore'
+
+export type TransformAttempt = {
+  id: string
+  type: TransformationType
+  columns: string[]
+  appliedAt: string
+  lambda?: number
+  statsBefore: DistributionSummary
+  statsAfter: DistributionSummary
+  skewnessBefore: number | null
+  skewnessAfter: number | null
+  sparkBefore: number[]
+  sparkAfter: number[]
+}
 
 export const ROW_ORDER_AXIS = '__row_order__'

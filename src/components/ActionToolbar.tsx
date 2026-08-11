@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AuditLogPanel } from './AuditLogPanel'
 import { InfoTip } from './InfoTip'
+import { ModalPortal } from './ModalPortal'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { AuditReasonInput } from '../store/useDataInspectorStore'
 import type { CellMark } from '../types/data'
@@ -530,7 +531,7 @@ export function ActionToolbar() {
         </div>
       </section>
       {pendingAction ? (
-        <div className="modal-backdrop" role="presentation">
+        <ModalPortal>
           <div
             className="reason-modal"
             role="dialog"
@@ -592,7 +593,7 @@ export function ActionToolbar() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       ) : null}
       </div>
       )}

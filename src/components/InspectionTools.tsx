@@ -1,12 +1,37 @@
 import { useMemo, useState } from 'react'
 import { InfoTip } from './InfoTip'
+import { ModalPortal } from './ModalPortal'
+import { TransformHistoryPanel } from './TransformHistoryPanel'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { PlotType, PreviewCell, RawCellValue } from '../types/data'
+import type { PlotType, PreviewCell, RawCellValue, TransformationType } from '../types/data'
 import { PLOT_TYPE_OPTIONS } from '../types/data'
 import { makeCellId } from '../utils/cellId'
-import { getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
+import { findNumericColumns, getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
 import { formatNumber, summarizeColumn } from '../utils/stats'
+import {
+  estimateOptimalBoxCoxLambda,
+  getColumnNumericValues,
+  suggestAlternativeTransforms,
+  validateTransformFeasibility,
+} from '../utils/transforms'
+
+const TRANSFORM_LABELS: Record<TransformationType, string> = {
+  log: 'Log',
+  log10: 'Log10',
+  sqrt: 'Square Root',
+  boxcox: 'Box-Cox',
+  zscore: 'Z-Score',
+}
+
+type InfeasibleDialogState = {
+  type: TransformationType
+  columns: string[]
+  lambda?: number
+  zeroNegativeCount: number
+  totalCount: number
+  issues: string[]
+}
 
 export function InspectionTools() {
   const {
@@ -23,6 +48,7 @@ export function InspectionTools() {
     clearTargetMarks,
     clearPreview,
     clearSelection,
+    applyColumnTransform,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -35,6 +61,13 @@ export function InspectionTools() {
   const [customColor, setCustomColor] = useState('#a855f7')
   const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [mode, setMode] = useState<'review' | 'transform'>('review')
+  const [targetMode, setTargetMode] = useState<'current' | 'selected'>('current')
+  const [batchColumns, setBatchColumns] = useState<string[]>([])
+  const [boxcoxAutoOptimize, setBoxcoxAutoOptimize] = useState(true)
+  const [boxcoxLambda, setBoxcoxLambda] = useState('1.00')
+  const [offsetChoice, setOffsetChoice] = useState<'skip' | 'offset'>('skip')
+  const [infeasibleDialog, setInfeasibleDialog] = useState<InfeasibleDialogState | null>(null)
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const summary = useMemo(() => {
@@ -43,6 +76,95 @@ export function InspectionTools() {
     }
     return summarizeColumn(sheet.rows, sheet.name, selectedColumn, cellState)
   }, [cellState, selectedColumn, sheet])
+
+  const numericColumns = useMemo(() => {
+    if (!sheet) {
+      return []
+    }
+    return findNumericColumns(sheet.rows, sheet.columns)
+  }, [sheet])
+
+  const targetColumns =
+    targetMode === 'current'
+      ? selectedColumn
+        ? [selectedColumn]
+        : []
+      : batchColumns.filter((column) => numericColumns.includes(column))
+
+  const transformBaseDisabled = !sheet || !selectedColumn || !summary || summary.count < 2
+  const transformDisabled = transformBaseDisabled || targetColumns.length === 0
+  const zScoreUndefined = !summary || summary.standardDeviation === null || summary.standardDeviation === 0
+  const zScoreDisabled = transformDisabled || zScoreUndefined
+  const zScoreTitle = zScoreUndefined
+    ? 'All values are identical; z-score is undefined.'
+    : 'Standardizes values using (x - mean) / standard deviation. Values must be numeric.'
+
+  function toggleBatchColumn(column: string) {
+    setBatchColumns((current) =>
+      current.includes(column) ? current.filter((item) => item !== column) : [...current, column],
+    )
+  }
+
+  function finalizeTransform(type: TransformationType, columns: string[], lambda: number | undefined, useOffset: boolean) {
+    const { appliedCount, skippedCount } = applyColumnTransform(columns, type, { lambda, useOffset })
+    let text = `${TRANSFORM_LABELS[type]} applied to ${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'}${
+      skippedCount > 0 ? ` (${skippedCount.toLocaleString()} skipped)` : ''
+    } across ${columns.length.toLocaleString()} column${columns.length === 1 ? '' : 's'}.`
+    if (plotType === 'scatter') {
+      text += ' Switch to Histogram or Q-Q plot to see the effect.'
+    }
+    setMessage(text)
+    setInfeasibleDialog(null)
+  }
+
+  function runTransform(type: TransformationType) {
+    if (!sheet || targetColumns.length === 0) {
+      setMessage('Choose at least one numeric column to transform.')
+      return
+    }
+
+    let lambda: number | undefined
+    if (type === 'boxcox') {
+      if (boxcoxAutoOptimize) {
+        const combined = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
+        lambda = estimateOptimalBoxCoxLambda(combined)
+        setBoxcoxLambda(lambda.toFixed(2))
+      } else {
+        const parsed = Number(boxcoxLambda)
+        lambda = Number.isFinite(parsed) ? parsed : 1
+      }
+    }
+
+    const combinedValues = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
+    const feasibility = validateTransformFeasibility(combinedValues, type)
+
+    if (!feasibility.feasible) {
+      setOffsetChoice('skip')
+      setInfeasibleDialog({
+        type,
+        columns: targetColumns,
+        lambda,
+        zeroNegativeCount: feasibility.zeroNegativeCount,
+        totalCount: combinedValues.length,
+        issues: feasibility.issues,
+      })
+      return
+    }
+
+    finalizeTransform(type, targetColumns, lambda, false)
+  }
+
+  function confirmInfeasibleTransform() {
+    if (!infeasibleDialog) {
+      return
+    }
+    finalizeTransform(infeasibleDialog.type, infeasibleDialog.columns, infeasibleDialog.lambda, offsetChoice === 'offset')
+  }
+
+  function cancelInfeasibleTransform() {
+    setInfeasibleDialog(null)
+    setMessage('Transform canceled. No values were changed.')
+  }
 
   function buildPreview(
     previewKey: string,
@@ -289,6 +411,24 @@ export function InspectionTools() {
         <strong>{formatNumber(summary?.standardDeviation ?? null)}</strong>
       </div>
 
+      <div className="action-tab-bar">
+        <button
+          type="button"
+          className={`action-tab${mode === 'review' ? ' action-tab-active' : ''}`}
+          onClick={() => setMode('review')}
+        >
+          Review
+        </button>
+        <button
+          type="button"
+          className={`action-tab${mode === 'transform' ? ' action-tab-active' : ''}`}
+          onClick={() => setMode('transform')}
+        >
+          Transform
+        </button>
+      </div>
+
+      {mode === 'review' ? (
       <div className="workflow-grid">
         <details className="tool-block collapsible-tool" open>
           <summary className="tool-block-summary">Preview Suggestions</summary>
@@ -481,7 +621,183 @@ export function InspectionTools() {
           </div>
         </details>
       </div>
+      ) : (
+      <>
+      <div className="workflow-grid">
+        <div className="tool-block">
+          <div className="tool-block-summary">Target columns</div>
+          <label className="field">
+            <span>Apply to</span>
+            <select
+              value={targetMode}
+              onChange={(event) => setTargetMode(event.target.value as 'current' | 'selected')}
+            >
+              <option value="current">Current column</option>
+              <option value="selected">Selected columns</option>
+            </select>
+          </label>
+          {targetMode === 'current' ? (
+            <p className="hint compact-help">{selectedColumn || 'No column selected.'}</p>
+          ) : numericColumns.length === 0 ? (
+            <p className="hint compact-help">No numeric columns available.</p>
+          ) : (
+            numericColumns.map((column) => (
+              <label key={column} className="transform-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={batchColumns.includes(column)}
+                  onChange={() => toggleBatchColumn(column)}
+                />
+                {column}
+              </label>
+            ))
+          )}
+        </div>
+
+        <div className="tool-block">
+          <div className="tool-block-summary">Apply transformation</div>
+          <div className="auto-tool-grid">
+            <button
+              type="button"
+              onClick={() => runTransform('log')}
+              disabled={transformDisabled}
+              title="Natural log: ln(x). Values must be positive."
+            >
+              <span className="button-icon" aria-hidden="true">ℓ</span>
+              Log
+            </button>
+            <button
+              type="button"
+              onClick={() => runTransform('log10')}
+              disabled={transformDisabled}
+              title="Base-10 log: log10(x). Values must be positive."
+            >
+              <span className="button-icon" aria-hidden="true">ℓ</span>
+              Log10
+            </button>
+            <button
+              type="button"
+              onClick={() => runTransform('sqrt')}
+              disabled={transformDisabled}
+              title="Square root: sqrt(x). Values must be positive."
+            >
+              <span className="button-icon" aria-hidden="true">√</span>
+              Square Root
+            </button>
+            <button
+              type="button"
+              onClick={() => runTransform('boxcox')}
+              disabled={transformDisabled}
+              title="Box-Cox power transform. Values must be positive."
+            >
+              <span className="button-icon" aria-hidden="true">λ</span>
+              Box-Cox
+            </button>
+            <button
+              type="button"
+              onClick={() => runTransform('zscore')}
+              disabled={zScoreDisabled}
+              title={zScoreTitle}
+            >
+              <span className="button-icon" aria-hidden="true">z</span>
+              Z-Score
+            </button>
+          </div>
+          <div className="z-preview-row" aria-label="Box-Cox lambda settings">
+            <label className="transform-checkbox-row">
+              <input
+                type="checkbox"
+                checked={boxcoxAutoOptimize}
+                onChange={(event) => setBoxcoxAutoOptimize(event.target.checked)}
+              />
+              Auto-optimize λ
+            </label>
+            <label className="mini-field">
+              <span>λ</span>
+              <input
+                value={boxcoxLambda}
+                onChange={(event) => setBoxcoxLambda(event.target.value)}
+                disabled={boxcoxAutoOptimize}
+                placeholder="1.00"
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+      <TransformHistoryPanel />
+      </>
+      )}
       {message ? <p className="hint">{message}</p> : null}
+
+      {infeasibleDialog ? (
+        <ModalPortal>
+          <div
+            className="reason-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transform-infeasible-title"
+          >
+            <div className="reason-modal-header">
+              <div>
+                <h2 id="transform-infeasible-title">Some values can&apos;t be transformed</h2>
+                <p>{infeasibleDialog.issues.join(' ')}</p>
+              </div>
+            </div>
+            <div className="reason-modal-action">
+              {`${TRANSFORM_LABELS[infeasibleDialog.type]} on ${infeasibleDialog.columns.length.toLocaleString()} column${
+                infeasibleDialog.columns.length === 1 ? '' : 's'
+              }`}
+            </div>
+            <p className="transform-warning">
+              {`${infeasibleDialog.zeroNegativeCount.toLocaleString()} of ${infeasibleDialog.totalCount.toLocaleString()} value${
+                infeasibleDialog.totalCount === 1 ? '' : 's'
+              } cannot be transformed as-is.`}
+            </p>
+            {infeasibleDialog.type === 'log' || infeasibleDialog.type === 'log10' ? (
+              <div className="field">
+                <span>How should these values be handled?</span>
+                <label className="transform-checkbox-row">
+                  <input
+                    type="radio"
+                    name="infeasible-choice"
+                    checked={offsetChoice === 'skip'}
+                    onChange={() => setOffsetChoice('skip')}
+                  />
+                  Skip these values, transform the rest
+                </label>
+                <label className="transform-checkbox-row">
+                  <input
+                    type="radio"
+                    name="infeasible-choice"
+                    checked={offsetChoice === 'offset'}
+                    onChange={() => setOffsetChoice('offset')}
+                  />
+                  Add +1 to every value first, then transform
+                </label>
+              </div>
+            ) : (
+              <p className="reason-modal-helper">
+                These values will be skipped. The rest of the column will still be transformed.
+              </p>
+            )}
+            <p className="reason-modal-helper">
+              Alternatively, try:{' '}
+              {suggestAlternativeTransforms(infeasibleDialog.type)
+                .map((alternative) => TRANSFORM_LABELS[alternative])
+                .join(', ')}
+              .
+            </p>
+            <div className="modal-actions">
+              <button type="button" onClick={cancelInfeasibleTransform}>
+                Cancel
+              </button>
+              <button type="button" className="primary-action" onClick={confirmInfeasibleTransform}>
+                Apply transform
+              </button>
+            </div>
+          </div>
+        </ModalPortal>
+      ) : null}
       </div>
     </details>
   )

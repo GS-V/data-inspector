@@ -222,6 +222,11 @@ export function buildAuditLogCsv(auditLog: AuditAction[]): string {
         return newValue !== null && newValue !== undefined
           ? `Replaced with ${String(newValue)}`
           : 'Replaced'
+      case 'transform_log': return 'Log transform applied'
+      case 'transform_log10': return 'Log10 transform applied'
+      case 'transform_sqrt': return 'Square root transform applied'
+      case 'transform_boxcox': return 'Box-Cox transform applied'
+      case 'transform_zscore': return 'Z-score transform applied'
       case 'undo': return 'Undone'
       default: return String(actionType)
     }

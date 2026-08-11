@@ -18,6 +18,11 @@ function actionLabel(actionType: AuditActionType, newValue?: unknown): string {
     case 'blank_problem':
     case 'blank_review': return 'Blanked'
     case 'replace_value': return newValue !== null && newValue !== undefined ? `Replaced with ${String(newValue)}` : 'Replaced'
+    case 'transform_log': return 'Log transform applied'
+    case 'transform_log10': return 'Log10 transform applied'
+    case 'transform_sqrt': return 'Square root transform applied'
+    case 'transform_boxcox': return 'Box-Cox transform applied'
+    case 'transform_zscore': return 'Z-score transform applied'
     case 'undo': return 'Undone'
     default: return String(actionType)
   }
@@ -34,6 +39,11 @@ function actionIcon(actionType: AuditActionType): { icon: string; css: string } 
     case 'blank_problem':
     case 'blank_review': return { icon: '□', css: 'audit-icon-blank' }
     case 'replace_value': return { icon: '↔', css: 'audit-icon-replace' }
+    case 'transform_log': return { icon: 'ℓ', css: 'audit-icon-transform' }
+    case 'transform_log10': return { icon: 'ℓ', css: 'audit-icon-transform' }
+    case 'transform_sqrt': return { icon: '√', css: 'audit-icon-transform' }
+    case 'transform_boxcox': return { icon: 'λ', css: 'audit-icon-transform' }
+    case 'transform_zscore': return { icon: 'z', css: 'audit-icon-transform' }
     case 'undo': return { icon: '↶', css: 'audit-icon-undo' }
     default: return { icon: '•', css: '' }
   }
