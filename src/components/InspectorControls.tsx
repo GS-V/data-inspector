@@ -1,5 +1,6 @@
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import { ROW_ORDER_AXIS } from '../types/data'
+import type { PlotType } from '../types/data'
+import { PLOT_TYPE_OPTIONS, ROW_ORDER_AXIS } from '../types/data'
 import { findNumericColumns } from '../utils/numeric'
 
 export function InspectorControls() {
@@ -66,13 +67,16 @@ export function InspectorControls() {
 
       <label className="field">
         <span>Plot type</span>
-        <select value={plotType} onChange={(event) => setPlotType(event.target.value as 'scatter' | 'histogram')}>
-          <option value="scatter">Scatter</option>
-          <option value="histogram">Histogram</option>
+        <select value={plotType} onChange={(event) => setPlotType(event.target.value as PlotType)}>
+          {PLOT_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </label>
 
-      <p className="hint">Scatter lets you click or drag-select values. Histogram shows the selected column’s distribution.</p>
+      <p className="hint">Scatter lets you click or drag-select values. Other chart types show the selected column’s distribution.</p>
 
       {sheet && numericColumns.length === 0 ? (
         <p className="hint">No numeric columns were found in this sheet.</p>

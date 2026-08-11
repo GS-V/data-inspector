@@ -504,6 +504,11 @@ button:disabled {
   font-weight: 700;
 }
 
+.mini-field.chart-type-field {
+  grid-template-columns: auto minmax(120px, 1fr);
+  grid-column: 1 / -1;
+}
+
 .summary-grid span {
   color: var(--muted-text);
 }

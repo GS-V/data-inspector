@@ -82,7 +82,24 @@ export type DistributionSummary = {
   standardDeviation: number | null
 }
 
-export type PlotType = 'scatter' | 'histogram'
+export type PlotType =
+  | 'scatter'
+  | 'histogram'
+  | 'box'
+  | 'qq'
+  | 'density'
+  | 'cdf'
+  | 'violin'
+
+export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
+  { value: 'scatter', label: 'Scatter' },
+  { value: 'histogram', label: 'Histogram' },
+  { value: 'box', label: 'Box plot' },
+  { value: 'violin', label: 'Violin plot' },
+  { value: 'qq', label: 'Q-Q plot' },
+  { value: 'density', label: 'Density plot (KDE)' },
+  { value: 'cdf', label: 'Cumulative distribution' },
+]
 
 
 export const ROW_ORDER_AXIS = '__row_order__'

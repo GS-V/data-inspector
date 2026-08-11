@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { PreviewCell, RawCellValue } from '../types/data'
+import type { PlotType, PreviewCell, RawCellValue } from '../types/data'
+import { PLOT_TYPE_OPTIONS } from '../types/data'
 import { makeCellId } from '../utils/cellId'
 import { getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
@@ -95,21 +96,6 @@ export function InspectionTools() {
   function parseInput(value: string): number | null {
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
-  }
-
-  function showDistribution() {
-    if (!summary) {
-      setMessage('Open a sheet with a numeric column to see the distribution.')
-      return
-    }
-
-    const nextPlotType = plotType === 'histogram' ? 'scatter' : 'histogram'
-    setPlotType(nextPlotType)
-    setMessage(
-      nextPlotType === 'histogram'
-        ? 'Distribution view shown. This does not select, mark, or edit values.'
-        : 'Scatter view shown. You can click or drag-select points again.',
-    )
   }
 
   function previewThreshold() {
@@ -261,7 +247,6 @@ export function InspectionTools() {
   }
 
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
-  const distributionLabel = plotType === 'histogram' ? 'Show scatter' : 'Show distribution'
   const valueFilterButtonLabel =
     valueFilterMode === 'greater'
       ? 'Preview greater than value'
@@ -330,19 +315,21 @@ export function InspectionTools() {
               <span className="button-icon" aria-hidden="true">≡</span>
               Duplicate values
             </button>
-            <button
-              type="button"
-              onClick={showDistribution}
-              disabled={!sheet}
-              title={
-                plotType === 'histogram'
-                  ? 'Switches back to the scatter plot for selecting points.'
-                  : 'Switches to a histogram view of the selected value column.'
-              }
-            >
-              <span className="button-icon" aria-hidden="true">⌂</span>
-              {distributionLabel}
-            </button>
+            <label className="mini-field chart-type-field">
+              <span>Chart type</span>
+              <select
+                value={plotType}
+                onChange={(event) => setPlotType(event.target.value as PlotType)}
+                disabled={!sheet}
+                title="Changes the chart shown in the chart panel."
+              >
+                {PLOT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="z-preview-row" aria-label="Far from average preview settings">
             <button
