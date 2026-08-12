@@ -3,6 +3,8 @@ import type { AuditAction, CellState, RawCellValue, SheetData, WorkbookData } fr
 import { actionLabel } from './auditReason'
 import { makeCellId } from './cellId'
 import { getDisplayValue, getEffectiveValue } from './numeric'
+import type { QcReport } from './qcReport'
+import { formatNumber } from './stats'
 
 type FillColor = {
   argb: string
@@ -244,6 +246,74 @@ export function buildAuditLogCsv(auditLog: AuditAction[]): string {
   }))
 
   return rowsToCsv(rows, columns)
+}
+
+export function buildQcReportCsv(report: QcReport): string {
+  const overviewRows = [
+    { Metric: 'File', Value: report.fileName },
+    { Metric: 'Generated', Value: new Date(report.generatedAt).toLocaleString() },
+    { Metric: 'Total rows', Value: report.totalRows },
+    { Metric: 'Rows affected', Value: report.affectedRows },
+    { Metric: 'Rows kept unaffected (%)', Value: (report.keptRowRatio * 100).toFixed(1) },
+  ]
+  const overviewCsv = rowsToCsv(overviewRows, ['Metric', 'Value'])
+
+  const breakdownRows = [
+    { Action: 'Flagged for review', Count: report.breakdown.flagged },
+    { Action: 'Marked as problem', Count: report.breakdown.problem },
+    { Action: 'Marked as accepted', Count: report.breakdown.accepted },
+    { Action: 'Custom highlight', Count: report.breakdown.custom },
+    { Action: 'Blanked', Count: report.breakdown.blanked },
+    { Action: 'Replaced', Count: report.breakdown.replaced },
+  ]
+  const breakdownCsv = rowsToCsv(breakdownRows, ['Action', 'Count'])
+
+  const statsRows = report.columnStats.flatMap((stat) => [
+    {
+      Sheet: stat.sheetName,
+      Column: stat.columnName,
+      Stage: 'Before',
+      Count: stat.before.count,
+      Mean: formatNumber(stat.before.mean),
+      Median: formatNumber(stat.before.median),
+      SD: formatNumber(stat.before.standardDeviation),
+      Min: formatNumber(stat.before.min),
+      Max: formatNumber(stat.before.max),
+    },
+    {
+      Sheet: stat.sheetName,
+      Column: stat.columnName,
+      Stage: 'After',
+      Count: stat.after.count,
+      Mean: formatNumber(stat.after.mean),
+      Median: formatNumber(stat.after.median),
+      SD: formatNumber(stat.after.standardDeviation),
+      Min: formatNumber(stat.after.min),
+      Max: formatNumber(stat.after.max),
+    },
+  ])
+  const statsCsv = rowsToCsv(statsRows, ['Sheet', 'Column', 'Stage', 'Count', 'Mean', 'Median', 'SD', 'Min', 'Max'])
+
+  const timelineRows = report.timeline.map((bucket) => ({
+    'Bucket start': new Date(bucket.bucketStart).toLocaleString(),
+    'Bucket end': new Date(bucket.bucketEnd).toLocaleString(),
+    'Action count': bucket.count,
+  }))
+  const timelineCsv = rowsToCsv(timelineRows, ['Bucket start', 'Bucket end', 'Action count'])
+
+  return [
+    '=== Overview ===',
+    overviewCsv,
+    '',
+    '=== Cleaning breakdown ===',
+    breakdownCsv,
+    '',
+    '=== Before / after statistics ===',
+    statsCsv,
+    '',
+    '=== Cleaning activity over time ===',
+    timelineCsv,
+  ].join('\n')
 }
 
 export function downloadCsv(fileName: string, csv: string) {

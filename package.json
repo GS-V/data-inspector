@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:file-risk": "node --experimental-strip-types scripts/test-file-risk.ts",
     "test:review-checks": "node --experimental-strip-types scripts/test-review-checks.ts",
+    "test:qc-report": "node scripts/run-vite-test.mjs scripts/test-qc-report.ts",
     "test:store-overlays": "node scripts/run-vite-test.mjs scripts/test-store-overlays.ts",
     "test:exports": "node scripts/run-vite-test.mjs scripts/test-exports.ts",
     "test:normality": "node scripts/run-vite-test.mjs scripts/test-normality.ts",

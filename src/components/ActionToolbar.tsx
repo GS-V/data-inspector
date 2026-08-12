@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AuditLogPanel } from './AuditLogPanel'
 import { InfoTip } from './InfoTip'
 import { ModalPortal } from './ModalPortal'
+import { QcReportModal } from './QcReportModal'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { AuditReasonInput } from '../store/useDataInspectorStore'
 import type { CellMark } from '../types/data'
@@ -86,6 +87,7 @@ export function ActionToolbar() {
   const [reasonCategory, setReasonCategory] = useState('')
   const [reasonNote, setReasonNote] = useState('')
   const [pendingAction, setPendingAction] = useState<PendingCleaningAction | null>(null)
+  const [showQcReport, setShowQcReport] = useState(false)
   const [reasonError, setReasonError] = useState('')
   const [exportType, setExportType] = useState<ExportType>('csv')
   const [exportNameDraft, setExportNameDraft] = useState<{ sourceFileName?: string; value: string }>({
@@ -387,7 +389,7 @@ export function ActionToolbar() {
       </div>
 
       {activeTab === 'audit' ? (
-        <AuditLogPanel onExport={handleAuditExport} />
+        <AuditLogPanel onExport={handleAuditExport} onGenerateReport={() => setShowQcReport(true)} />
       ) : (
       <div className="action-tab-content">
       <div className="panel-title">Actions</div>
@@ -597,6 +599,15 @@ export function ActionToolbar() {
       ) : null}
       </div>
       )}
+
+      {showQcReport && workbook ? (
+        <QcReportModal
+          workbook={workbook}
+          cellState={cellState}
+          auditLog={auditLog}
+          onClose={() => setShowQcReport(false)}
+        />
+      ) : null}
     </aside>
   )
 }

@@ -2473,3 +2473,98 @@ button {
   padding-right: 4px;
 }
 
+/* ── QC report modal ───────────────────────────────────────────────── */
+.qc-report-modal {
+  width: min(920px, 92vw);
+  max-width: 920px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.qc-report-section {
+  margin-top: 16px;
+}
+
+.qc-report-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--muted-text);
+}
+
+.qc-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.qc-summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-subtle);
+}
+
+.qc-summary-cell strong {
+  font-size: 1.4rem;
+  color: var(--strong-text);
+}
+
+.qc-summary-cell span {
+  font-size: 0.8rem;
+  color: var(--muted-text);
+}
+
+.qc-report-table-wrap {
+  overflow-x: auto;
+}
+
+.qc-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.qc-report-table th,
+.qc-report-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.qc-timeline-chart {
+  display: block;
+  height: 96px;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .qc-report-modal,
+  .qc-report-modal * {
+    visibility: visible;
+  }
+
+  .qc-report-modal {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .qc-report-modal .no-print {
+    display: none;
+  }
+
+  .qc-report-table {
+    page-break-inside: avoid;
+  }
+}
+

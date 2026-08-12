@@ -90,7 +90,13 @@ function matchesSearch(action: AuditAction, query: string): boolean {
   )
 }
 
-export function AuditLogPanel({ onExport }: { onExport: () => void }) {
+export function AuditLogPanel({
+  onExport,
+  onGenerateReport,
+}: {
+  onExport: () => void
+  onGenerateReport: () => void
+}) {
   const auditLog = useDataInspectorStore((s) => s.auditLog)
   const [search, setSearch] = useState('')
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
@@ -249,6 +255,16 @@ export function AuditLogPanel({ onExport }: { onExport: () => void }) {
         >
           <span className="button-icon" aria-hidden="true">⇩</span>
           Export CSV
+        </button>
+        <button
+          type="button"
+          className="audit-generate-report-btn"
+          onClick={onGenerateReport}
+          disabled={auditLog.length === 0}
+          title="Generate a summary report of cleaning activity for this workbook"
+        >
+          <span className="button-icon" aria-hidden="true">▦</span>
+          Generate QC Report
         </button>
       </div>
     </div>
