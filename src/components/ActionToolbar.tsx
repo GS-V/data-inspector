@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AuditLogPanel } from './AuditLogPanel'
+import { Icon } from './Icon'
+import type { IconName } from './Icon'
 import { InfoTip } from './InfoTip'
 import { ModalPortal } from './ModalPortal'
 import { QcReportModal } from './QcReportModal'
@@ -32,21 +34,21 @@ function fileStem(fileName: string | undefined): string {
   return (fileName ?? 'data-inspector').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-')
 }
 
+const CHIP_ICONS: Partial<Record<string, IconName>> = {
+  review: 'flag',
+  problem: 'alert',
+  keep: 'check-circle',
+  custom: 'palette',
+  blanked: 'eraser',
+}
+
 function CountChip({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  const icons: Record<string, string> = {
-    selected: '☑',
-    preview: '↝',
-    review: '⚑',
-    problem: '△',
-    keep: '✓',
-    custom: '◇',
-    blanked: '◉',
-  }
+  const iconName = tone ? CHIP_ICONS[tone] : undefined
 
   return (
     <span className={`count-chip ${tone ?? ''}`}>
       <span>
-        <span className="chip-icon" aria-hidden="true">{icons[tone ?? 'selected'] ?? '•'}</span>
+        {iconName ? <Icon name={iconName} className="chip-icon" /> : null}
         {label}
       </span>
       <strong>{value.toLocaleString()}</strong>
@@ -380,7 +382,7 @@ export function ActionToolbar() {
           className={`action-tab${activeTab === 'audit' ? ' action-tab-active' : ''}`}
           onClick={() => setActiveTab('audit')}
         >
-          <span className="button-icon" aria-hidden="true">▤</span>
+          <Icon name="clipboard" />
           Audit log
           {auditLog.length > 0 && (
             <span className="action-tab-badge">{auditLog.length}</span>
@@ -434,7 +436,7 @@ export function ActionToolbar() {
             disabled={selectedCount === 0 || replacementValue.trim() === ''}
             title="Replaces selected values in cleaned exports. Raw data is not changed."
           >
-            <span className="button-icon" aria-hidden="true">↔</span>
+            <Icon name="swap" />
             Replace selected with new value
           </button>
           {replacementMessage ? <p className="hint action-message">{replacementMessage}</p> : null}
@@ -445,7 +447,7 @@ export function ActionToolbar() {
             disabled={targetCount === 0}
             title="Selected or previewed values become blank in the cleaned export. Rows are not deleted."
           >
-            <span className="button-icon" aria-hidden="true">→</span>
+            <Icon name="eraser" />
             Replace selected values with blank
           </button>
           <button
@@ -456,7 +458,7 @@ export function ActionToolbar() {
             disabled={selectedColumnCounts.problem === 0}
             title="Replaces all red Problem cells in the current sheet and selected column with blank in the cleaned export."
           >
-            <span className="button-icon problem-icon" aria-hidden="true">△</span>
+            <Icon name="alert" className="problem-icon" />
             Replace problem with blank
           </button>
           <button
@@ -467,7 +469,7 @@ export function ActionToolbar() {
             disabled={selectedColumnCounts.review === 0}
             title="Replaces all yellow Review cells in the current sheet and selected column with blank in the cleaned export."
           >
-            <span className="button-icon review-icon" aria-hidden="true">⚑</span>
+            <Icon name="flag" className="review-icon" />
             Replace review with blank
           </button>
           <button
@@ -476,7 +478,7 @@ export function ActionToolbar() {
             disabled={undoStack.length === 0}
             title="Reverses the most recent grouped mark, replace, remove highlight, or blank action."
           >
-            <span className="button-icon" aria-hidden="true">↶</span>
+            <Icon name="undo" />
             Undo last action
           </button>
         </div>
@@ -509,7 +511,7 @@ export function ActionToolbar() {
             onClick={handleDataExport}
             disabled={isExportDisabled}
           >
-            <span className="button-icon" aria-hidden="true">⇩</span>
+            <Icon name="download" />
             Export data
           </button>
           <button
@@ -519,7 +521,7 @@ export function ActionToolbar() {
             disabled={auditLog.length === 0}
             title="Exports highlights, blanks, removals, and undo actions as a separate audit file."
           >
-            <span className="button-icon" aria-hidden="true">▤</span>
+            <Icon name="clipboard" />
             Export audit log
           </button>
           {statusText ? (

@@ -1,7 +1,28 @@
 import type { AuditActionType } from '../types/data'
+import type { IconName } from '../components/Icon'
 
 export function hasCompleteAuditReason(reasonCategory: string, reasonNote: string): boolean {
   return reasonCategory.trim() !== '' && reasonNote.trim() !== ''
+}
+
+export function actionIconName(actionType: AuditActionType): IconName {
+  switch (actionType) {
+    case 'mark_review': return 'flag'
+    case 'mark_problem': return 'alert'
+    case 'mark_keep': return 'check-circle'
+    case 'mark_custom': return 'palette'
+    case 'clear_mark': return 'x-circle'
+    case 'blank_selected':
+    case 'blank_problem':
+    case 'blank_review': return 'eraser'
+    case 'replace_value': return 'swap'
+    case 'transform_log':
+    case 'transform_log10': return 'compress'
+    case 'transform_sqrt': return 'soften'
+    case 'transform_boxcox': return 'auto'
+    case 'transform_zscore': return 'bell'
+    case 'undo': return 'undo'
+  }
 }
 
 export function actionLabel(actionType: AuditActionType, newValue?: unknown): string {

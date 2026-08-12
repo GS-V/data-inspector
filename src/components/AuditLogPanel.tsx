@@ -1,31 +1,31 @@
 import { useMemo, useState } from 'react'
+import { Icon } from './Icon'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { AuditAction, AuditActionType } from '../types/data'
-import { actionLabel } from '../utils/auditReason'
+import { actionIconName, actionLabel } from '../utils/auditReason'
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-function actionIcon(actionType: AuditActionType): { icon: string; css: string } {
+function actionIconCss(actionType: AuditActionType): string {
   switch (actionType) {
-    case 'mark_review': return { icon: '⚑', css: 'audit-icon-review' }
-    case 'mark_problem': return { icon: '△', css: 'audit-icon-problem' }
-    case 'mark_keep': return { icon: '✓', css: 'audit-icon-keep' }
-    case 'mark_custom': return { icon: '◇', css: 'audit-icon-custom' }
-    case 'clear_mark': return { icon: '×', css: 'audit-icon-clear' }
+    case 'mark_review': return 'audit-icon-review'
+    case 'mark_problem': return 'audit-icon-problem'
+    case 'mark_keep': return 'audit-icon-keep'
+    case 'mark_custom': return 'audit-icon-custom'
+    case 'clear_mark': return 'audit-icon-clear'
     case 'blank_selected':
     case 'blank_problem':
-    case 'blank_review': return { icon: '□', css: 'audit-icon-blank' }
-    case 'replace_value': return { icon: '↔', css: 'audit-icon-replace' }
-    case 'transform_log': return { icon: 'ℓ', css: 'audit-icon-transform' }
-    case 'transform_log10': return { icon: 'ℓ', css: 'audit-icon-transform' }
-    case 'transform_sqrt': return { icon: '√', css: 'audit-icon-transform' }
-    case 'transform_boxcox': return { icon: 'λ', css: 'audit-icon-transform' }
-    case 'transform_zscore': return { icon: 'z', css: 'audit-icon-transform' }
-    case 'undo': return { icon: '↶', css: 'audit-icon-undo' }
-    default: return { icon: '•', css: '' }
+    case 'blank_review': return 'audit-icon-blank'
+    case 'replace_value': return 'audit-icon-replace'
+    case 'transform_log':
+    case 'transform_log10':
+    case 'transform_sqrt':
+    case 'transform_boxcox':
+    case 'transform_zscore': return 'audit-icon-transform'
+    case 'undo': return 'audit-icon-undo'
   }
 }
 
@@ -133,7 +133,7 @@ export function AuditLogPanel({
   if (auditLog.length === 0) {
     return (
       <div className="audit-empty">
-        <span className="button-icon" aria-hidden="true">▤</span>
+        <Icon name="clipboard" />
         <p>No changes recorded yet.</p>
         <p className="hint">Flag, highlight, or blank values to build the audit log.</p>
       </div>
@@ -162,7 +162,7 @@ export function AuditLogPanel({
       </div>
 
       <div className="audit-search-bar">
-        <span className="button-icon" aria-hidden="true">⌕</span>
+        <Icon name="search" />
         <input
           type="text"
           placeholder="Filter by column, reason, or identity…"
@@ -214,10 +214,11 @@ export function AuditLogPanel({
               {isOpen && (
                 <div className="audit-action-list">
                   {group.actions.map((action) => {
-                    const { icon, css } = actionIcon(action.actionType)
                     return (
                       <div key={action.id} className="audit-action-row">
-                        <span className={`audit-entry-icon ${css}`} aria-hidden="true">{icon}</span>
+                        <span className={`audit-entry-icon ${actionIconCss(action.actionType)}`}>
+                          <Icon name={actionIconName(action.actionType)} />
+                        </span>
                         <div className="audit-entry-id">
                           <strong>{action.rowIdentifier}</strong>
                         </div>
@@ -253,7 +254,7 @@ export function AuditLogPanel({
           disabled={auditLog.length === 0}
           title="Export audit log as CSV"
         >
-          <span className="button-icon" aria-hidden="true">⇩</span>
+          <Icon name="download" />
           Export CSV
         </button>
         <button
@@ -263,7 +264,7 @@ export function AuditLogPanel({
           disabled={auditLog.length === 0}
           title="Generate a summary report of cleaning activity for this workbook"
         >
-          <span className="button-icon" aria-hidden="true">▦</span>
+          <Icon name="report" />
           Generate QC Report
         </button>
       </div>

@@ -157,33 +157,6 @@ function makeAction(
     replaced: 0,
   })
   assert.equal(report.keptRowRatio, 1)
-  assert.deepEqual(report.timeline, [])
-  checks++
-}
-
-// 7. Timeline bucketing: cluster actions in one bucket and confirm it is the max, and that
-// the bucket count is capped at the configured default (12).
-{
-  const sheet = makeSheet('Sheet1', 20)
-  const workbook = makeWorkbook([sheet])
-  const base = Date.parse('2024-01-01T00:00:00.000Z')
-  const minute = 60_000
-
-  const offsetsMinutes = [0, 2, 5, 5, 5, 5, 5, 12]
-  const auditLog: AuditAction[] = offsetsMinutes.map((offset, index) =>
-    makeAction({
-      actionType: 'mark_review',
-      cellId: makeCellId('Sheet1', index, 'value'),
-      rowIndex: index,
-      timestamp: new Date(base + offset * minute).toISOString(),
-    }),
-  )
-
-  const report = buildQcReport(workbook, {}, auditLog)
-  assert.equal(report.timeline.length, 12, 'timeline is capped at the default bucket count')
-  const maxCount = Math.max(...report.timeline.map((bucket) => bucket.count))
-  assert.equal(report.timeline[5].count, 5, 'bucket 5 (the 5-minute mark) should hold the clustered actions')
-  assert.equal(report.timeline[5].count, maxCount, 'the clustered bucket should be the maximum')
   checks++
 }
 

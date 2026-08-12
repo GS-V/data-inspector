@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ActionToolbar } from './components/ActionToolbar'
 import { FileLoader } from './components/FileLoader'
+import { Icon, IconSprite } from './components/Icon'
 import { InspectionTools } from './components/InspectionTools'
 import { InspectorChart } from './components/InspectorChart'
 import { InspectorControls } from './components/InspectorControls'
@@ -46,6 +47,7 @@ function App() {
 
   return (
     <main className="app-shell">
+      <IconSprite />
       <header className="app-header">
         <div className="brand-block">
           <div className="brand-mark" aria-hidden="true">
@@ -69,7 +71,7 @@ function App() {
             onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
           >
-            <span aria-hidden="true">☼</span>
+            <Icon name="sun" />
             {theme === 'light' ? 'Dark' : 'Light'}
           </button>
         </div>
@@ -87,8 +89,9 @@ function App() {
                 <li>Preview values that may need review.</li>
                 <li>Select points or rows.</li>
                 <li>Highlight, blank, or replace values.</li>
+                <li>Transform a column and check its normality, if needed.</li>
                 <li>Add a reason when changing data.</li>
-                <li>Export cleaned data and the audit log.</li>
+                <li>Export cleaned data, the audit log, or a QC report summarizing what changed.</li>
               </ol>
             </details>
           </section>
@@ -100,7 +103,7 @@ function App() {
               <ul>
                 <li>Files stay in your browser. Nothing is uploaded.</li>
                 <li>Large files may be rejected for browser safety.</li>
-                <li>Export your cleaned file and audit log before closing.</li>
+                <li>Export your cleaned file, audit log, or QC report before closing.</li>
                 <li>This is an early testing version.</li>
               </ul>
             </details>

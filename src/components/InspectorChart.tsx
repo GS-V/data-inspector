@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Plot from 'react-plotly.js'
+import { Icon } from './Icon'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { CellState } from '../types/data'
 import { ROW_ORDER_AXIS } from '../types/data'
@@ -140,6 +141,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     return (
       <>
         <button type="button" onClick={() => setShowBlankedPoints((current) => !current)}>
+          <Icon name="eye" />
           {showBlankedPoints ? 'Hide blanked points' : 'Show blanked points'}
         </button>
         <button
@@ -149,9 +151,11 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             setEmptySelectionVersion((version) => version + 1)
           }}
         >
+          <Icon name="x-circle" />
           Clear selection
         </button>
         <button type="button" onClick={clearPreview} disabled={Object.keys(previewCells).length === 0}>
+          <Icon name="x-circle" />
           Clear preview
         </button>
       </>

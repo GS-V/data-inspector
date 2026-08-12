@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Icon } from './Icon'
 import { InfoTip } from './InfoTip'
 import { ModalPortal } from './ModalPortal'
 import { NormalitySide } from './NormalityResult'
@@ -17,20 +18,13 @@ import { makeCellId } from '../utils/cellId'
 import { findNumericColumns, getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
 import { formatNumber, summarizeColumn } from '../utils/stats'
+import { TRANSFORM_INFO } from '../utils/transformLabels'
 import {
   estimateOptimalBoxCoxLambda,
   getColumnNumericValues,
   suggestAlternativeTransforms,
   validateTransformFeasibility,
 } from '../utils/transforms'
-
-const TRANSFORM_LABELS: Record<TransformationType, string> = {
-  log: 'Log',
-  log10: 'Log10',
-  sqrt: 'Square Root',
-  boxcox: 'Box-Cox',
-  zscore: 'Z-Score',
-}
 
 type InfeasibleDialogState = {
   type: TransformationType
@@ -137,7 +131,7 @@ export function InspectionTools() {
 
   function finalizeTransform(type: TransformationType, columns: string[], lambda: number | undefined, useOffset: boolean) {
     const { appliedCount, skippedCount } = applyColumnTransform(columns, type, { lambda, useOffset })
-    let text = `${TRANSFORM_LABELS[type]} applied to ${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'}${
+    let text = `${TRANSFORM_INFO[type].label} applied to ${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'}${
       skippedCount > 0 ? ` (${skippedCount.toLocaleString()} skipped)` : ''
     } across ${columns.length.toLocaleString()} column${columns.length === 1 ? '' : 's'}.`
     if (plotType === 'scatter') {
@@ -471,18 +465,18 @@ export function InspectionTools() {
               type="button"
               onClick={showUnusualValues}
               disabled={!sheet}
-              title="Finds values far below or above the middle range of the data. Method: Q1 - 1.5 x IQR to Q3 + 1.5 x IQR."
+              title="Flags values outside the typical spread of this column — below Q1 − 1.5×IQR or above Q3 + 1.5×IQR (Tukey's fence), the standard rule of thumb for outlier screening."
             >
-              <span className="button-icon" aria-hidden="true">⌁</span>
+              <Icon name="outlier" />
               Outside typical range
             </button>
             <button
               type="button"
               onClick={showDuplicateValues}
               disabled={!sheet}
-              title="Finds repeated non-empty values in this column. Most useful for ID, sample, plot, or record columns."
+              title="Finds repeated non-empty values in this column — most useful for ID, sample, plot, or record columns."
             >
-              <span className="button-icon" aria-hidden="true">≡</span>
+              <Icon name="copy" />
               Duplicate values
             </button>
             <label className="mini-field chart-type-field">
@@ -506,9 +500,9 @@ export function InspectionTools() {
               type="button"
               onClick={showZScoreOutliers}
               disabled={!sheet}
-              title="Finds values unusually far from the column average. Method: z-score."
+              title="Flags values whose z-score — z = (x − mean) / SD — is at or beyond the cutoff you set below; e.g. a cutoff of 3 flags anything more than 3 standard deviations from the average."
             >
-              <span className="button-icon" aria-hidden="true">▥</span>
+              <Icon name="distance" />
               Far from average
             </button>
             <label className="mini-field">
@@ -597,7 +591,7 @@ export function InspectionTools() {
               disabled={targetCount === 0}
               title="Yellow highlight. Use for values you want to inspect later."
             >
-              <span className="button-icon review-icon" aria-hidden="true">⚑</span>
+              <Icon name="flag" className="review-icon" />
               Flag for review
             </button>
             <button
@@ -607,7 +601,7 @@ export function InspectionTools() {
               disabled={targetCount === 0}
               title="Red highlight. Use for values that are likely incorrect."
             >
-              <span className="button-icon problem-icon" aria-hidden="true">△</span>
+              <Icon name="alert" className="problem-icon" />
               Mark as problem
             </button>
             <button
@@ -617,7 +611,7 @@ export function InspectionTools() {
               disabled={targetCount === 0}
               title="Green highlight. Use for values you reviewed and decided to keep."
             >
-              <span className="button-icon keep-icon" aria-hidden="true">✓</span>
+              <Icon name="check-circle" className="keep-icon" />
               Mark as accepted
             </button>
             <div className="custom-highlight-row">
@@ -634,8 +628,8 @@ export function InspectionTools() {
                 disabled={targetCount === 0}
                 title="Applies the chosen custom color as a persistent highlight."
               >
-                <span className="button-icon" aria-hidden="true">◇</span>
-                Custom
+                <Icon name="palette" />
+                Custom color
               </button>
             </div>
             <button
@@ -644,7 +638,7 @@ export function InspectionTools() {
               disabled={targetCount === 0}
               title="Removes persistent highlight marks from selected or previewed cells. Raw values are not changed."
             >
-              <span className="button-icon" aria-hidden="true">×</span>
+              <Icon name="x-circle" />
               Remove highlight
             </button>
           </div>
@@ -688,63 +682,58 @@ export function InspectionTools() {
 
         <div className="tool-block">
           <div className="tool-block-summary">Apply transformation</div>
-          <div className="auto-tool-grid">
-            <button
-              type="button"
-              onClick={() => runTransform('log')}
-              disabled={transformDisabled}
-              title="Natural log: ln(x). Values must be positive."
-            >
-              <span className="button-icon" aria-hidden="true">ℓ</span>
-              Log
-            </button>
-            <button
-              type="button"
-              onClick={() => runTransform('log10')}
-              disabled={transformDisabled}
-              title="Base-10 log: log10(x). Values must be positive."
-            >
-              <span className="button-icon" aria-hidden="true">ℓ</span>
-              Log10
-            </button>
-            <button
-              type="button"
-              onClick={() => runTransform('sqrt')}
-              disabled={transformDisabled}
-              title="Square root: sqrt(x). Values must be positive."
-            >
-              <span className="button-icon" aria-hidden="true">√</span>
-              Square Root
-            </button>
-            <button
-              type="button"
-              onClick={() => runTransform('boxcox')}
-              disabled={transformDisabled}
-              title="Box-Cox power transform. Values must be positive."
-            >
-              <span className="button-icon" aria-hidden="true">λ</span>
-              Box-Cox
-            </button>
-            <button
-              type="button"
-              onClick={() => runTransform('zscore')}
-              disabled={zScoreDisabled}
-              title={zScoreTitle}
-            >
-              <span className="button-icon" aria-hidden="true">z</span>
-              Z-Score
-            </button>
+          <div className="transform-grid">
+            {(Object.keys(TRANSFORM_INFO) as TransformationType[]).map((type) => {
+              const isZScore = type === 'zscore'
+              const isDisabled = isZScore ? zScoreDisabled : transformDisabled
+              const info = TRANSFORM_INFO[type]
+              return (
+                <div
+                  key={type}
+                  className="xform-card"
+                  role="button"
+                  tabIndex={isDisabled ? -1 : 0}
+                  aria-disabled={isDisabled}
+                  title={isZScore ? zScoreTitle : undefined}
+                  onClick={() => {
+                    if (isDisabled) return
+                    runTransform(type)
+                  }}
+                  onKeyDown={(event) => {
+                    if (isDisabled) return
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      runTransform(type)
+                    }
+                  }}
+                >
+                  <span className="icon-wrap">
+                    <Icon name={info.icon} />
+                  </span>
+                  <span className="xform-card-body">
+                    <span className="xform-card-title-row">
+                      <strong>{info.label}</strong>
+                      <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                        <InfoTip label={info.math} />
+                      </span>
+                    </span>
+                    <span className="xform-card-effect">{info.effect}</span>
+                  </span>
+                </div>
+              )
+            })}
           </div>
-          <div className="z-preview-row" aria-label="Box-Cox lambda settings">
+          <div className="normality-settings-row" aria-label="Box-Cox lambda settings">
             <label className="transform-checkbox-row">
               <input
                 type="checkbox"
                 checked={boxcoxAutoOptimize}
                 onChange={(event) => setBoxcoxAutoOptimize(event.target.checked)}
               />
-              Auto-optimize λ
+              Auto-pick the best exponent
+              <InfoTip label="Runs a grid search over λ from −2 to 2 in 0.05 steps and keeps the value whose transformed skewness is closest to zero — a practical stand-in for 'closest to normal' that's much cheaper to compute than full maximum-likelihood Box-Cox estimation. Turn this off to set λ yourself." />
             </label>
-            <label className="mini-field">
+            <label className="normality-field-inline">
               <span>λ</span>
               <input
                 value={boxcoxLambda}
@@ -754,9 +743,12 @@ export function InspectionTools() {
               />
             </label>
           </div>
-          <div className="z-preview-row" aria-label="Normality test settings">
-            <label className="mini-field normality-test-field">
-              <span>Normality test</span>
+          <div className="normality-fields-grid" aria-label="Normality test settings">
+            <label className="normality-field">
+              <span>
+                Normality test
+                <InfoTip label="Shapiro-Wilk (default) — compares the ordered sample values against the values expected from a true normal distribution; the closer the fit, the higher the W statistic and p-value. Most reliable for small-to-medium samples (n < 5000). Jarque-Bera — builds a chi-square statistic from the sample's skewness and kurtosis; suits very large samples where Shapiro-Wilk loses power. Anderson-Darling — a weighted comparison of the empirical and theoretical CDFs that weights the tails more heavily, so it's more sensitive to outliers than the other two." />
+              </span>
               <select
                 value={normalityTestType}
                 onChange={(event) => setNormalityTestType(event.target.value as NormalityTestType)}
@@ -768,8 +760,11 @@ export function InspectionTools() {
                 ))}
               </select>
             </label>
-            <label className="mini-field">
-              <span>α</span>
+            <label className="normality-field">
+              <span>
+                α (significance level)
+                <InfoTip label="α is the significance threshold: if the test's p-value is ≤ α, there's enough evidence to say this column doesn't look normal (reject normality). If p > α, there isn't enough evidence to say it's abnormal — that is not the same as proving it is normal. 0.05 is standard; lowering it (e.g. to 0.01) makes the test more lenient about calling data normal." />
+              </span>
               <input
                 type="number"
                 step="0.01"
@@ -783,11 +778,12 @@ export function InspectionTools() {
           <p className="hint compact-help">Typical values: 0.01–0.10 (default 0.05)</p>
           <button
             type="button"
+            className="check-normality-button"
             onClick={runNormalityCheck}
             disabled={transformDisabled}
             title="Checks the current values of the target column(s) against the active test and threshold. Does not transform anything."
           >
-            <span className="button-icon" aria-hidden="true">?</span>
+            <Icon name="bell" />
             Check normality
           </button>
           {normalityCheck ? (
@@ -815,7 +811,7 @@ export function InspectionTools() {
               </div>
             </div>
             <div className="reason-modal-action">
-              {`${TRANSFORM_LABELS[infeasibleDialog.type]} on ${infeasibleDialog.columns.length.toLocaleString()} column${
+              {`${TRANSFORM_INFO[infeasibleDialog.type].label} on ${infeasibleDialog.columns.length.toLocaleString()} column${
                 infeasibleDialog.columns.length === 1 ? '' : 's'
               }`}
             </div>
@@ -854,7 +850,7 @@ export function InspectionTools() {
             <p className="reason-modal-helper">
               Alternatively, try:{' '}
               {suggestAlternativeTransforms(infeasibleDialog.type)
-                .map((alternative) => TRANSFORM_LABELS[alternative])
+                .map((alternative) => TRANSFORM_INFO[alternative].label)
                 .join(', ')}
               .
             </p>

@@ -405,6 +405,31 @@ button {
   opacity: 0.92;
 }
 
+.icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.file-caret-icon {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+}
+
 .review-icon {
   color: var(--review-border);
 }
@@ -501,6 +526,48 @@ button:disabled {
   justify-content: flex-start;
   min-height: 40px;
   text-align: left;
+}
+
+.transform-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.xform-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-subtle);
+  cursor: pointer;
+  text-align: left;
+}
+
+.xform-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.xform-card strong {
+  font-size: 0.85rem;
+  color: var(--strong-text);
+}
+
+.xform-card-effect {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--muted-text);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.xform-card[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .mini-field {
@@ -642,6 +709,7 @@ button:disabled {
 
 .count-chip strong {
   color: var(--strong-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .count-chip.preview {
@@ -904,6 +972,7 @@ td {
   background: var(--panel-subtle);
   font-size: 11px;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .mark-stack {
@@ -1776,6 +1845,78 @@ button {
   border-left: 1px solid var(--border);
 }
 
+/* Normality settings: stack each label above its control instead of beside it. The
+   .z-preview-row/.mini-field pattern (used elsewhere, e.g. Far from average + Z cutoff) is
+   fine for a short button next to a 3-digit field, but breaks once the label is multi-word
+   ("Normality test", "α (significance level)") on a narrow column — the label wraps and
+   collides with its own InfoTip badge. Scoped to these two rows only; .z-preview-row itself
+   is untouched and still used elsewhere. */
+.normality-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-subtle) 86%, transparent);
+}
+
+.normality-settings-row .normality-field-inline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.normality-settings-row .normality-field-inline span {
+  font-size: 11px;
+  color: var(--muted-text);
+}
+
+.normality-settings-row .normality-field-inline input {
+  width: 62px;
+}
+
+.normality-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-subtle) 86%, transparent);
+}
+
+.normality-field {
+  display: grid;
+  gap: 3px;
+}
+
+.normality-field > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--muted-text);
+  font-weight: 700;
+}
+
+.check-normality-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Left column can go narrower than 480px in some breakpoints — drop to one column rather
+   than let "Normality test" + its select get squeezed again. */
+@media (max-width: 480px) {
+  .normality-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .threshold-row.percentile-mode select {
   grid-column: 1 / -1;
 }
@@ -2006,6 +2147,7 @@ button {
   font-weight: 700;
   color: var(--strong-text);
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .audit-stat-cell span {
@@ -2400,11 +2542,6 @@ button {
   margin-left: auto;
 }
 
-/* Widen the test-name select beyond the default narrow mini-field second column. */
-.z-preview-row .mini-field.normality-test-field {
-  grid-template-columns: auto minmax(110px, 1fr);
-}
-
 .normality-block {
   display: grid;
   gap: 4px;
@@ -2510,6 +2647,7 @@ button {
 .qc-summary-cell strong {
   font-size: 1.4rem;
   color: var(--strong-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .qc-summary-cell span {
@@ -2532,11 +2670,6 @@ button {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   text-align: left;
-}
-
-.qc-timeline-chart {
-  display: block;
-  height: 96px;
 }
 
 @media print {

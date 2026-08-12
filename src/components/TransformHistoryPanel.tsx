@@ -2,20 +2,13 @@ import { NORMALITY_TEST_LABELS, NormalitySide } from './NormalityResult'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { TransformationType } from '../types/data'
 import { formatNumber } from '../utils/stats'
-
-const TRANSFORM_LABELS: Record<TransformationType, string> = {
-  log: 'Natural log',
-  log10: 'Log10',
-  sqrt: 'Square root',
-  boxcox: 'Box-Cox',
-  zscore: 'Z-score',
-}
+import { TRANSFORM_INFO } from '../utils/transformLabels'
 
 function transformTitle(type: TransformationType, lambda?: number): string {
   if (type === 'boxcox') {
     return `Box-Cox (λ=${(lambda ?? 1).toFixed(2)})`
   }
-  return TRANSFORM_LABELS[type]
+  return TRANSFORM_INFO[type].label
 }
 
 function formatTimestamp(iso: string): string {

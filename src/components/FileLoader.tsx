@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon } from './Icon'
 import { InfoTip } from './InfoTip'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import { assessFileLoadRisk } from '../utils/fileRisk'
@@ -67,9 +68,11 @@ export function FileLoader() {
     <section className="file-loader">
       <div>
         <label className="file-picker">
-          <span className="button-icon" aria-hidden="true">⇧</span>
+          <Icon name="folder-open" />
           <span>Open CSV or XLSX</span>
-          <span className="file-caret" aria-hidden="true">⌄</span>
+          <span className="file-caret">
+            <Icon name="chevron-down" className="file-caret-icon" />
+          </span>
           <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} />
         </label>
         <p className="privacy-note">

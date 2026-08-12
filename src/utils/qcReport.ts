@@ -9,22 +9,6 @@ import type {
 import { makeCellId, parseCellId } from './cellId'
 import { summarizeColumn } from './stats'
 
-// Action types that represent a QC "cleaning" decision (highlighting, blanking, manual
-// replacement). Deliberately excludes transform_* (separate feature, own reporting in
-// TransformHistoryPanel) and 'undo' (only ever shown in the timeline, never in totals —
-// totals are always derived from current cellState, which already reflects any undo).
-export const CLEANING_ACTION_TYPES: AuditActionType[] = [
-  'mark_review',
-  'mark_problem',
-  'mark_keep',
-  'mark_custom',
-  'clear_mark',
-  'blank_selected',
-  'blank_problem',
-  'blank_review',
-  'replace_value',
-]
-
 export type QcActionBreakdown = {
   flagged: number
   problem: number
@@ -48,12 +32,6 @@ export type QcSheetSummary = {
   keptRowRatio: number // 0..1; NaN-safe (0 rows -> 1)
 }
 
-export type QcTimelineBucket = {
-  bucketStart: string // ISO
-  bucketEnd: string // ISO
-  count: number
-}
-
 export type QcReport = {
   generatedAt: string
   fileName: string
@@ -63,7 +41,6 @@ export type QcReport = {
   affectedRows: number
   keptRowRatio: number
   columnStats: QcColumnStat[]
-  timeline: QcTimelineBucket[]
 }
 
 /**
@@ -190,39 +167,6 @@ function buildColumnStats(
     .filter((entry): entry is QcColumnStat => entry !== null)
 }
 
-function buildTimeline(auditLog: AuditAction[], bucketCount = 12): QcTimelineBucket[] {
-  const qcEvents = auditLog.filter(
-    (action) => CLEANING_ACTION_TYPES.includes(action.actionType) || action.actionType === 'undo',
-  )
-  if (qcEvents.length === 0) {
-    return []
-  }
-
-  const timestamps = qcEvents.map((action) => new Date(action.timestamp).getTime())
-  const start = Math.min(...timestamps)
-  const end = Math.max(...timestamps)
-
-  if (start === end) {
-    return [{ bucketStart: new Date(start).toISOString(), bucketEnd: new Date(end).toISOString(), count: qcEvents.length }]
-  }
-
-  const span = end - start
-  const bucketSize = span / bucketCount
-  const buckets: QcTimelineBucket[] = Array.from({ length: bucketCount }, (_, index) => ({
-    bucketStart: new Date(start + index * bucketSize).toISOString(),
-    bucketEnd: new Date(start + (index + 1) * bucketSize).toISOString(),
-    count: 0,
-  }))
-
-  qcEvents.forEach((action) => {
-    const t = new Date(action.timestamp).getTime()
-    const index = Math.min(bucketCount - 1, Math.floor((t - start) / bucketSize))
-    buckets[index].count += 1
-  })
-
-  return buckets
-}
-
 export function buildQcReport(
   workbook: WorkbookData,
   cellState: Record<string, CellState>,
@@ -261,6 +205,5 @@ export function buildQcReport(
     affectedRows,
     keptRowRatio: totalRows === 0 ? 1 : 1 - affectedRows / totalRows,
     columnStats,
-    timeline: buildTimeline(auditLog),
   }
 }

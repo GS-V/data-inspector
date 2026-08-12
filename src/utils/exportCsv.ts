@@ -294,13 +294,6 @@ export function buildQcReportCsv(report: QcReport): string {
   ])
   const statsCsv = rowsToCsv(statsRows, ['Sheet', 'Column', 'Stage', 'Count', 'Mean', 'Median', 'SD', 'Min', 'Max'])
 
-  const timelineRows = report.timeline.map((bucket) => ({
-    'Bucket start': new Date(bucket.bucketStart).toLocaleString(),
-    'Bucket end': new Date(bucket.bucketEnd).toLocaleString(),
-    'Action count': bucket.count,
-  }))
-  const timelineCsv = rowsToCsv(timelineRows, ['Bucket start', 'Bucket end', 'Action count'])
-
   return [
     '=== Overview ===',
     overviewCsv,
@@ -310,9 +303,6 @@ export function buildQcReportCsv(report: QcReport): string {
     '',
     '=== Before / after statistics ===',
     statsCsv,
-    '',
-    '=== Cleaning activity over time ===',
-    timelineCsv,
   ].join('\n')
 }
 

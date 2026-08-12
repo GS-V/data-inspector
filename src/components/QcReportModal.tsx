@@ -1,6 +1,8 @@
 import { Fragment, useMemo } from 'react'
+import { Icon } from './Icon'
 import { ModalPortal } from './ModalPortal'
 import type { AuditAction, CellState, WorkbookData } from '../types/data'
+import { actionIconName } from '../utils/auditReason'
 import { buildQcReport } from '../utils/qcReport'
 import { buildQcReportCsv, downloadCsv } from '../utils/exportCsv'
 import { formatNumber } from '../utils/stats'
@@ -11,42 +13,6 @@ function fileStem(fileName: string): string {
 
 function formatPercent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
-}
-
-function TimelineChart({ timeline }: { timeline: { bucketStart: string; count: number }[] }) {
-  if (timeline.length === 0) {
-    return <p className="hint">No timestamped cleaning activity to show yet.</p>
-  }
-
-  const width = 640
-  const height = 96
-  const barGap = 2
-  const barWidth = width / timeline.length - barGap
-  const max = Math.max(1, ...timeline.map((bucket) => bucket.count))
-
-  return (
-    <svg
-      className="qc-timeline-chart"
-      width="100%"
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-label="Cleaning actions over time"
-    >
-      {timeline.map((bucket, index) => {
-        const barHeight = (bucket.count / max) * (height - 16)
-        return (
-          <rect
-            key={bucket.bucketStart}
-            x={index * (barWidth + barGap)}
-            y={height - barHeight}
-            width={Math.max(barWidth, 1)}
-            height={Math.max(barHeight, 1)}
-            fill="var(--accent)"
-          />
-        )
-      })}
-    </svg>
-  )
 }
 
 export function QcReportModal({
@@ -136,12 +102,30 @@ export function QcReportModal({
         <section className="qc-report-section">
           <h3>Cleaning breakdown</h3>
           <div className="chip-grid">
-            <span className="count-chip review"><span>Flagged</span><strong>{report.breakdown.flagged}</strong></span>
-            <span className="count-chip problem"><span>Problem</span><strong>{report.breakdown.problem}</strong></span>
-            <span className="count-chip keep"><span>Accepted</span><strong>{report.breakdown.accepted}</strong></span>
-            <span className="count-chip custom"><span>Custom</span><strong>{report.breakdown.custom}</strong></span>
-            <span className="count-chip blanked"><span>Blanked</span><strong>{report.breakdown.blanked}</strong></span>
-            <span className="count-chip"><span>Replaced</span><strong>{report.breakdown.replaced}</strong></span>
+            <span className="count-chip review">
+              <span><Icon name={actionIconName('mark_review')} className="chip-icon" />Flagged</span>
+              <strong>{report.breakdown.flagged}</strong>
+            </span>
+            <span className="count-chip problem">
+              <span><Icon name={actionIconName('mark_problem')} className="chip-icon" />Problem</span>
+              <strong>{report.breakdown.problem}</strong>
+            </span>
+            <span className="count-chip keep">
+              <span><Icon name={actionIconName('mark_keep')} className="chip-icon" />Accepted</span>
+              <strong>{report.breakdown.accepted}</strong>
+            </span>
+            <span className="count-chip custom">
+              <span><Icon name={actionIconName('mark_custom')} className="chip-icon" />Custom</span>
+              <strong>{report.breakdown.custom}</strong>
+            </span>
+            <span className="count-chip blanked">
+              <span><Icon name={actionIconName('blank_selected')} className="chip-icon" />Blanked</span>
+              <strong>{report.breakdown.blanked}</strong>
+            </span>
+            <span className="count-chip">
+              <span><Icon name={actionIconName('replace_value')} className="chip-icon" />Replaced</span>
+              <strong>{report.breakdown.replaced}</strong>
+            </span>
           </div>
         </section>
 
@@ -191,20 +175,15 @@ export function QcReportModal({
           </div>
         </section>
 
-        <section className="qc-report-section">
-          <h3>Cleaning activity over time</h3>
-          <TimelineChart timeline={report.timeline} />
-        </section>
-
         <div className="modal-actions no-print">
           <button type="button" onClick={onClose}>
-            Close
+            <Icon name="x-circle" />Close
           </button>
           <button type="button" onClick={exportCsvReport}>
-            Export CSV
+            <Icon name="clipboard" />Export CSV
           </button>
           <button type="button" className="primary-action" onClick={exportPdf}>
-            Export PDF
+            <Icon name="download" />Export PDF
           </button>
         </div>
         <p className="hint no-print">
