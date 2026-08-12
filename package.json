@@ -1,0 +1,45 @@
+{
+  "name": "data-inspector",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test:file-risk": "node --experimental-strip-types scripts/test-file-risk.ts",
+    "test:review-checks": "node --experimental-strip-types scripts/test-review-checks.ts",
+    "test:store-overlays": "node scripts/run-vite-test.mjs scripts/test-store-overlays.ts",
+    "test:exports": "node scripts/run-vite-test.mjs scripts/test-exports.ts",
+    "test:normality": "node scripts/run-vite-test.mjs scripts/test-normality.ts",
+    "test:shapiro-groundtruth": "node scripts/run-vite-test.mjs scripts/test-shapiro-groundtruth.ts",
+    "test:normality-threshold-clamp": "node scripts/run-vite-test.mjs scripts/test-normality-threshold-clamp.ts",
+    "check:capacity": "node scripts/check-capacity.mjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "papaparse": "^5.5.4",
+    "plotly.js-dist-min": "^3.6.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-plotly.js": "^4.0.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.3",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}
