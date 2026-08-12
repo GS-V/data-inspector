@@ -108,6 +108,22 @@ export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
 
 export type TransformationType = 'log' | 'log10' | 'sqrt' | 'boxcox' | 'zscore'
 
+export type NormalityTestType = 'shapiro-wilk' | 'jarque-bera' | 'anderson-darling'
+
+export const NORMALITY_TEST_OPTIONS: { value: NormalityTestType; label: string }[] = [
+  { value: 'shapiro-wilk', label: 'Shapiro-Wilk' },
+  { value: 'jarque-bera', label: 'Jarque-Bera' },
+  { value: 'anderson-darling', label: 'Anderson-Darling' },
+]
+
+export type NormalityTestResult = {
+  testName: NormalityTestType
+  statistic: number | null
+  pValue: number | null
+  n: number
+  warnings: string[]
+}
+
 export type TransformAttempt = {
   id: string
   type: TransformationType
@@ -120,6 +136,10 @@ export type TransformAttempt = {
   skewnessAfter: number | null
   sparkBefore: number[]
   sparkAfter: number[]
+  normalityTestType: NormalityTestType
+  normalityThreshold: number
+  normalityBefore: NormalityTestResult | null
+  normalityAfter: NormalityTestResult | null
 }
 
 export const ROW_ORDER_AXIS = '__row_order__'

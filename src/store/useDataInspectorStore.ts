@@ -5,6 +5,7 @@ import type {
   CellId,
   CellMark,
   CellState,
+  NormalityTestType,
   PlotType,
   PreviewCell,
   RawCellValue,
@@ -18,7 +19,7 @@ import { getVisibleColumnValues } from '../utils/chartData'
 import { makeCellId, parseCellId } from '../utils/cellId'
 import { buildRowIdentifier, findNumericColumns, getEffectiveValue } from '../utils/numeric'
 import { summarizeNumbers } from '../utils/stats'
-import { calculateSkewness, computeSparkbucket, transformValue } from '../utils/transforms'
+import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue } from '../utils/transforms'
 
 type CellChange = {
   cellId: CellId
@@ -49,6 +50,8 @@ type DataInspectorState = {
   auditLog: AuditAction[]
   undoStack: AuditAction[][]
   transformHistory: TransformAttempt[]
+  normalityTestType: NormalityTestType
+  normalityThreshold: number
   setWorkbook: (workbook: WorkbookData) => void
   setActiveSheetName: (sheetName: string) => void
   setSelectedColumn: (columnName: string) => void
@@ -69,6 +72,8 @@ type DataInspectorState = {
     type: TransformationType,
     params?: { useOffset?: boolean; lambda?: number },
   ) => { appliedCount: number; skippedCount: number }
+  setNormalityTestType: (type: NormalityTestType) => void
+  setNormalityThreshold: (threshold: number) => void
   undoLastActionGroup: () => void
 }
 
@@ -285,6 +290,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     auditLog: [],
     undoStack: [],
     transformHistory: [],
+    normalityTestType: 'shapiro-wilk',
+    normalityThreshold: 0.05,
 
     setWorkbook: (workbook) => {
       const firstSheet = workbook.sheets[0]
@@ -552,6 +559,11 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         (columnName) => getVisibleColumnValues(sheet, columnName, afterState.cellState).map((entry) => entry.value),
       )
 
+      const normalityTestType = get().normalityTestType
+      const normalityThreshold = get().normalityThreshold
+      const normalityBefore = beforeValues.length > 0 ? runNormalityTest(beforeValues, normalityTestType) : null
+      const normalityAfter = afterValues.length > 0 ? runNormalityTest(afterValues, normalityTestType) : null
+
       const attempt: TransformAttempt = {
         id: makeId('transform'),
         type,
@@ -564,11 +576,25 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         skewnessAfter: calculateSkewness(afterValues),
         sparkBefore: computeSparkbucket(beforeValues),
         sparkAfter: computeSparkbucket(afterValues),
+        normalityTestType,
+        normalityThreshold,
+        normalityBefore,
+        normalityAfter,
       }
 
       set({ transformHistory: [...afterState.transformHistory, attempt] })
 
       return { appliedCount, skippedCount }
+    },
+
+    setNormalityTestType: (type) => set({ normalityTestType: type }),
+
+    setNormalityThreshold: (threshold) => {
+      const clamped =
+        Number.isFinite(threshold) && threshold > 0 && threshold < 1
+          ? threshold
+          : Math.min(0.5, Math.max(0.001, Number.isFinite(threshold) ? threshold : 0.05))
+      set({ normalityThreshold: clamped })
     },
 
     undoLastActionGroup: () => {

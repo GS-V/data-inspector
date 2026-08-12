@@ -2391,3 +2391,68 @@ button {
   margin-left: auto;
 }
 
+/* Widen the test-name select beyond the default narrow mini-field second column. */
+.z-preview-row .mini-field.normality-test-field {
+  grid-template-columns: auto minmax(110px, 1fr);
+}
+
+.normality-block {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.normality-header {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted-text);
+}
+
+.normality-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.normality-side {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+
+.normality-side-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted-text);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.normality-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.normality-badge-neutral { background: var(--panel-subtle); color: var(--muted-text); border: 1px solid var(--border-strong); }
+.normality-badge-keep    { background: var(--keep-bg);      color: var(--keep-text); }
+.normality-badge-problem { background: var(--problem-bg);   color: var(--problem-text); }
+
+.normality-stat {
+  font-size: 10.5px;
+  color: var(--muted-text);
+}
+
+.normality-warning-caption {
+  font-size: 9.5px;
+  color: var(--muted-text);
+  font-style: italic;
+  line-height: 1.3;
+}
+

@@ -1,5 +1,5 @@
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { TransformationType } from '../types/data'
+import type { NormalityTestResult, NormalityTestType, TransformationType } from '../types/data'
 import { formatNumber } from '../utils/stats'
 
 const TRANSFORM_LABELS: Record<TransformationType, string> = {
@@ -8,6 +8,62 @@ const TRANSFORM_LABELS: Record<TransformationType, string> = {
   sqrt: 'Square root',
   boxcox: 'Box-Cox',
   zscore: 'Z-score',
+}
+
+const NORMALITY_TEST_LABELS: Record<NormalityTestType, string> = {
+  'shapiro-wilk': 'Shapiro-Wilk',
+  'jarque-bera': 'Jarque-Bera',
+  'anderson-darling': 'Anderson-Darling',
+}
+
+function formatPValue(pValue: number | null): string {
+  if (pValue === null) {
+    return 'p = -'
+  }
+  if (pValue < 0.001) {
+    return 'p < 0.001'
+  }
+  return `p = ${pValue.toFixed(4)}`
+}
+
+function normalityVerdict(
+  result: NormalityTestResult | null,
+  threshold: number,
+): { label: string; tone: 'neutral' | 'keep' | 'problem' } {
+  if (!result || result.pValue === null) {
+    return { label: 'Not computed', tone: 'neutral' }
+  }
+  if (result.pValue > threshold) {
+    return { label: 'Fails to reject normality (p > α)', tone: 'keep' }
+  }
+  return { label: 'Rejects normality (p ≤ α)', tone: 'problem' }
+}
+
+function NormalitySide({
+  label,
+  result,
+  threshold,
+}: {
+  label: string
+  result: NormalityTestResult | null
+  threshold: number
+}) {
+  const { label: verdictLabel, tone } = normalityVerdict(result, threshold)
+  const warningText = result?.warnings.join(' ') || undefined
+
+  return (
+    <div className="normality-side">
+      <span className="normality-side-label">{label}</span>
+      <span className={`normality-badge normality-badge-${tone}`} title={warningText}>
+        {verdictLabel}
+      </span>
+      <span className="normality-stat">
+        {result?.statistic !== null && result?.statistic !== undefined ? `stat = ${result.statistic.toFixed(4)}` : 'stat = -'},{' '}
+        {formatPValue(result?.pValue ?? null)}
+      </span>
+      {warningText ? <span className="normality-warning-caption">{warningText}</span> : null}
+    </div>
+  )
 }
 
 function transformTitle(type: TransformationType, lambda?: number): string {
@@ -101,6 +157,15 @@ export function TransformHistoryPanel() {
                   <span>Mean {formatNumber(entry.statsBefore.mean, 2)} → {formatNumber(entry.statsAfter.mean, 2)}</span>
                   <span>SD {formatNumber(entry.statsBefore.standardDeviation, 2)} → {formatNumber(entry.statsAfter.standardDeviation, 2)}</span>
                   <span className="transform-history-time">{formatTimestamp(entry.appliedAt)}</span>
+                </div>
+                <div className="normality-block">
+                  <div className="normality-header">
+                    {NORMALITY_TEST_LABELS[entry.normalityTestType]}, α = {entry.normalityThreshold}
+                  </div>
+                  <div className="normality-sides">
+                    <NormalitySide label="Before" result={entry.normalityBefore} threshold={entry.normalityThreshold} />
+                    <NormalitySide label="After" result={entry.normalityAfter} threshold={entry.normalityThreshold} />
+                  </div>
                 </div>
               </button>
             ))}

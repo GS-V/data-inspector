@@ -3,8 +3,8 @@ import { InfoTip } from './InfoTip'
 import { ModalPortal } from './ModalPortal'
 import { TransformHistoryPanel } from './TransformHistoryPanel'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { PlotType, PreviewCell, RawCellValue, TransformationType } from '../types/data'
-import { PLOT_TYPE_OPTIONS } from '../types/data'
+import type { NormalityTestType, PlotType, PreviewCell, RawCellValue, TransformationType } from '../types/data'
+import { NORMALITY_TEST_OPTIONS, PLOT_TYPE_OPTIONS } from '../types/data'
 import { makeCellId } from '../utils/cellId'
 import { findNumericColumns, getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
@@ -49,6 +49,10 @@ export function InspectionTools() {
     clearPreview,
     clearSelection,
     applyColumnTransform,
+    normalityTestType,
+    normalityThreshold,
+    setNormalityTestType,
+    setNormalityThreshold,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -722,6 +726,33 @@ export function InspectionTools() {
               />
             </label>
           </div>
+          <div className="z-preview-row" aria-label="Normality test settings">
+            <label className="mini-field normality-test-field">
+              <span>Normality test</span>
+              <select
+                value={normalityTestType}
+                onChange={(event) => setNormalityTestType(event.target.value as NormalityTestType)}
+              >
+                {NORMALITY_TEST_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mini-field">
+              <span>α</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.001"
+                max="0.5"
+                value={normalityThreshold}
+                onChange={(event) => setNormalityThreshold(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          <p className="hint compact-help">Typical values: 0.01–0.10 (default 0.05)</p>
         </div>
       </div>
       <TransformHistoryPanel />
