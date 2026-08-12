@@ -74,7 +74,7 @@ const auditLog: AuditAction[] = [
 ]
 
 const auditCsv = buildAuditLogCsv(auditLog)
-assert.ok(auditCsv.startsWith('ID,Timestamp,Group ID,Action Type,Method,Method Context,Reason Category,Reason Note,Reason Summary,Sheet,Row,Column,Cell ID,Old Value,New Value,Old Cell State,New Cell State'))
+assert.ok(auditCsv.startsWith('Timestamp,Action,Action Detail,Column,Sheet,Row / Identity,Row #,Old Value,New Value,Reason Category,Reason Note,Method,Method Context,Group ID'))
 assert.ok(auditCsv.includes('Data entry issue'))
 assert.ok(auditCsv.includes('Corrected from field notes'))
 assert.ok(auditCsv.includes('Acted after preview: Value filter'))

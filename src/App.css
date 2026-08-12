@@ -338,7 +338,7 @@
 }
 
 select,
-input,
+input:not([type='checkbox']):not([type='radio']),
 textarea,
 button {
   min-height: 34px;
@@ -349,7 +349,7 @@ button {
 }
 
 select,
-input,
+input:not([type='checkbox']):not([type='radio']),
 textarea {
   width: 100%;
   box-sizing: border-box;
@@ -357,6 +357,15 @@ textarea {
   color: var(--strong-text);
   background: var(--control-bg);
   outline: none;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
 }
 
 textarea {
@@ -1023,7 +1032,7 @@ td:nth-child(7) {
 }
 
 select,
-input,
+input:not([type='checkbox']):not([type='radio']),
 button {
   min-height: 30px;
   font-size: 12px;
@@ -1293,7 +1302,7 @@ td {
 }
 
 select,
-input,
+input:not([type='checkbox']):not([type='radio']),
 button {
   min-height: 28px;
   border-radius: 6px;
@@ -2454,5 +2463,13 @@ button {
   color: var(--muted-text);
   font-style: italic;
   line-height: 1.3;
+}
+
+.batch-column-list {
+  display: grid;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 

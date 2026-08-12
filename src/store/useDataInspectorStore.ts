@@ -5,6 +5,7 @@ import type {
   CellId,
   CellMark,
   CellState,
+  NormalityTestResult,
   NormalityTestType,
   PlotType,
   PreviewCell,
@@ -74,6 +75,7 @@ type DataInspectorState = {
   ) => { appliedCount: number; skippedCount: number }
   setNormalityTestType: (type: NormalityTestType) => void
   setNormalityThreshold: (threshold: number) => void
+  checkColumnNormality: (columnNames: string[]) => NormalityTestResult | null
   undoLastActionGroup: () => void
 }
 
@@ -570,6 +572,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         columns: columnNames,
         appliedAt: new Date().toISOString(),
         lambda: type === 'boxcox' ? lambda : undefined,
+        useOffset: params?.useOffset,
         statsBefore: summarizeNumbers(beforeValues, 0),
         statsAfter: summarizeNumbers(afterValues, 0),
         skewnessBefore: calculateSkewness(beforeValues),
@@ -595,6 +598,21 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
           ? threshold
           : Math.min(0.5, Math.max(0.001, Number.isFinite(threshold) ? threshold : 0.05))
       set({ normalityThreshold: clamped })
+    },
+
+    checkColumnNormality: (columnNames) => {
+      const state = get()
+      const sheet = getSheet(state.workbook, state.activeSheetName)
+      if (!sheet || columnNames.length === 0) {
+        return null
+      }
+      const values = columnNames.flatMap(
+        (columnName) => getVisibleColumnValues(sheet, columnName, state.cellState).map((entry) => entry.value),
+      )
+      if (values.length === 0) {
+        return null
+      }
+      return runNormalityTest(values, state.normalityTestType)
     },
 
     undoLastActionGroup: () => {

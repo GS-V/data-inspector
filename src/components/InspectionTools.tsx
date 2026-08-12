@@ -1,9 +1,17 @@
 import { useMemo, useState } from 'react'
 import { InfoTip } from './InfoTip'
 import { ModalPortal } from './ModalPortal'
+import { NormalitySide } from './NormalityResult'
 import { TransformHistoryPanel } from './TransformHistoryPanel'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { NormalityTestType, PlotType, PreviewCell, RawCellValue, TransformationType } from '../types/data'
+import type {
+  NormalityTestResult,
+  NormalityTestType,
+  PlotType,
+  PreviewCell,
+  RawCellValue,
+  TransformationType,
+} from '../types/data'
 import { NORMALITY_TEST_OPTIONS, PLOT_TYPE_OPTIONS } from '../types/data'
 import { makeCellId } from '../utils/cellId'
 import { findNumericColumns, getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
@@ -53,6 +61,7 @@ export function InspectionTools() {
     normalityThreshold,
     setNormalityTestType,
     setNormalityThreshold,
+    checkColumnNormality,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -72,6 +81,7 @@ export function InspectionTools() {
   const [boxcoxLambda, setBoxcoxLambda] = useState('1.00')
   const [offsetChoice, setOffsetChoice] = useState<'skip' | 'offset'>('skip')
   const [infeasibleDialog, setInfeasibleDialog] = useState<InfeasibleDialogState | null>(null)
+  const [normalityCheck, setNormalityCheck] = useState<{ columns: string[]; result: NormalityTestResult } | null>(null)
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const summary = useMemo(() => {
@@ -102,6 +112,22 @@ export function InspectionTools() {
   const zScoreTitle = zScoreUndefined
     ? 'All values are identical; z-score is undefined.'
     : 'Standardizes values using (x - mean) / standard deviation. Values must be numeric.'
+
+  const targetColumnsKey = targetColumns.join(',')
+  const [lastNormalityCheckKey, setLastNormalityCheckKey] = useState(targetColumnsKey)
+  if (targetColumnsKey !== lastNormalityCheckKey) {
+    setLastNormalityCheckKey(targetColumnsKey)
+    setNormalityCheck(null)
+  }
+
+  function runNormalityCheck() {
+    if (targetColumns.length === 0) {
+      setMessage('Choose at least one numeric column to check.')
+      return
+    }
+    const result = checkColumnNormality(targetColumns)
+    setNormalityCheck(result ? { columns: targetColumns, result } : null)
+  }
 
   function toggleBatchColumn(column: string) {
     setBatchColumns((current) =>
@@ -645,16 +671,18 @@ export function InspectionTools() {
           ) : numericColumns.length === 0 ? (
             <p className="hint compact-help">No numeric columns available.</p>
           ) : (
-            numericColumns.map((column) => (
-              <label key={column} className="transform-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={batchColumns.includes(column)}
-                  onChange={() => toggleBatchColumn(column)}
-                />
-                {column}
-              </label>
-            ))
+            <div className="batch-column-list">
+              {numericColumns.map((column) => (
+                <label key={column} className="transform-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={batchColumns.includes(column)}
+                    onChange={() => toggleBatchColumn(column)}
+                  />
+                  {column}
+                </label>
+              ))}
+            </div>
           )}
         </div>
 
@@ -753,6 +781,18 @@ export function InspectionTools() {
             </label>
           </div>
           <p className="hint compact-help">Typical values: 0.01–0.10 (default 0.05)</p>
+          <button
+            type="button"
+            onClick={runNormalityCheck}
+            disabled={transformDisabled}
+            title="Checks the current values of the target column(s) against the active test and threshold. Does not transform anything."
+          >
+            <span className="button-icon" aria-hidden="true">?</span>
+            Check normality
+          </button>
+          {normalityCheck ? (
+            <NormalitySide label="Current" result={normalityCheck.result} threshold={normalityThreshold} />
+          ) : null}
         </div>
       </div>
       <TransformHistoryPanel />

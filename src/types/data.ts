@@ -130,6 +130,7 @@ export type TransformAttempt = {
   columns: string[]
   appliedAt: string
   lambda?: number
+  useOffset?: boolean
   statsBefore: DistributionSummary
   statsAfter: DistributionSummary
   skewnessBefore: number | null
