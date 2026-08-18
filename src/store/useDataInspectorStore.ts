@@ -5,6 +5,7 @@ import type {
   CellId,
   CellMark,
   CellState,
+  ImputationMethod,
   NormalityTestResult,
   NormalityTestType,
   PlotType,
@@ -18,8 +19,8 @@ import type {
 import { ROW_ORDER_AXIS } from '../types/data'
 import { getVisibleColumnValues } from '../utils/chartData'
 import { makeCellId, parseCellId } from '../utils/cellId'
-import { buildRowIdentifier, findNumericColumns, getEffectiveValue } from '../utils/numeric'
-import { summarizeNumbers } from '../utils/stats'
+import { buildRowIdentifier, findNumericColumns, getEffectiveValue, isMissing } from '../utils/numeric'
+import { formatNumber, summarizeNumbers } from '../utils/stats'
 import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue } from '../utils/transforms'
 
 type CellChange = {
@@ -72,6 +73,10 @@ type DataInspectorState = {
     columnNames: string[],
     type: TransformationType,
     params?: { useOffset?: boolean; lambda?: number },
+  ) => { appliedCount: number; skippedCount: number }
+  imputeMissingValues: (
+    method: ImputationMethod,
+    reasonInput?: AuditReasonInput,
   ) => { appliedCount: number; skippedCount: number }
   setNormalityTestType: (type: NormalityTestType) => void
   setNormalityThreshold: (threshold: number) => void
@@ -166,6 +171,24 @@ function transformReason(type: TransformationType, columnName: string, lambda?: 
   if (type === 'sqrt') return `Applied square root transformation to column ${columnName}`
   if (type === 'boxcox') return `Applied Box-Cox transformation (λ=${(lambda ?? 1).toFixed(2)}) to column ${columnName}`
   return `Applied z-score transformation to column ${columnName}`
+}
+
+function imputeActionType(method: ImputationMethod): AuditActionType {
+  if (method === 'mean') return 'impute_mean'
+  if (method === 'median') return 'impute_median'
+  return 'impute_interpolate'
+}
+
+function imputeMethodLabel(method: ImputationMethod): string {
+  if (method === 'mean') return 'impute column mean'
+  if (method === 'median') return 'impute column median'
+  return 'impute linear interpolation'
+}
+
+function imputeReason(method: ImputationMethod, value: number): string {
+  if (method === 'mean') return `Filled with column mean (${formatNumber(value)})`
+  if (method === 'median') return `Filled with column median (${formatNumber(value)})`
+  return `Filled with linear interpolation (${formatNumber(value)})`
 }
 
 function normalizeReasonInput(reasonInput?: AuditReasonInput): AuditReasonInput {
@@ -569,6 +592,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       const attempt: TransformAttempt = {
         id: makeId('transform'),
         type,
+        sheetName: sheet.name,
         columns: columnNames,
         appliedAt: new Date().toISOString(),
         lambda: type === 'boxcox' ? lambda : undefined,
@@ -586,6 +610,103 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       }
 
       set({ transformHistory: [...afterState.transformHistory, attempt] })
+
+      return { appliedCount, skippedCount }
+    },
+
+    imputeMissingValues: (method, reasonInput) => {
+      const state = get()
+      const sheet = getSheet(state.workbook, state.activeSheetName)
+      const columnName = state.selectedColumn
+      if (!sheet || !columnName) {
+        return { appliedCount: 0, skippedCount: 0 }
+      }
+
+      const selectedTargetIds = getTargetCellIds().filter((cellId) => {
+        const parsed = parseCellId(cellId)
+        return parsed.sheetName === sheet.name && parsed.columnName === columnName
+      })
+
+      const candidateRowIndexes =
+        selectedTargetIds.length > 0
+          ? selectedTargetIds.map((cellId) => parseCellId(cellId).rowIndex).sort((a, b) => a - b)
+          : sheet.rows.map((_, rowIndex) => rowIndex)
+
+      const missingRowIndexes = candidateRowIndexes.filter((rowIndex) => {
+        const cellId = makeCellId(sheet.name, rowIndex, columnName)
+        return isMissing(getEffectiveValue(getRawValue(sheet, rowIndex, columnName), state.cellState[cellId]))
+      })
+
+      if (missingRowIndexes.length === 0) {
+        return { appliedCount: 0, skippedCount: 0 }
+      }
+
+      // Neighbor/mean/median values are all computed once up front from this snapshot, then
+      // applied to every target cell -- mirrors applyColumnTransform's beforeValues/mean/sd
+      // pattern so a batch of fills within one action never chains off each other's new values.
+      const visibleEntries = getVisibleColumnValues(sheet, columnName, state.cellState)
+      if (visibleEntries.length === 0) {
+        return { appliedCount: 0, skippedCount: missingRowIndexes.length }
+      }
+
+      const changes: CellChange[] = []
+      let appliedCount = 0
+      let skippedCount = 0
+
+      const pushFill = (rowIndex: number, fillValue: number) => {
+        const cellId = makeCellId(sheet.name, rowIndex, columnName)
+        const nextState = {
+          ...(state.cellState[cellId] ?? {}),
+          valueOverride: fillValue,
+          mark: 'imputed' as const,
+        }
+        delete nextState.highlightColor
+
+        changes.push(withReasonContext({
+          cellId,
+          nextState,
+          actionType: imputeActionType(method),
+          method: imputeMethodLabel(method),
+          reason: imputeReason(method, fillValue),
+        }, reasonInput))
+        appliedCount += 1
+      }
+
+      if (method === 'interpolate') {
+        missingRowIndexes.forEach((rowIndex) => {
+          let low = 0
+          let high = visibleEntries.length
+          while (low < high) {
+            const mid = (low + high) >> 1
+            if (visibleEntries[mid].rowIndex < rowIndex) {
+              low = mid + 1
+            } else {
+              high = mid
+            }
+          }
+          const next = visibleEntries[low]
+          const prev = visibleEntries[low - 1]
+
+          if (!prev || !next) {
+            skippedCount += 1
+            return
+          }
+
+          const fillValue =
+            prev.value + ((next.value - prev.value) * (rowIndex - prev.rowIndex)) / (next.rowIndex - prev.rowIndex)
+          pushFill(rowIndex, fillValue)
+        })
+      } else {
+        const summary = summarizeNumbers(visibleEntries.map((entry) => entry.value), 0)
+        const fillValue = method === 'mean' ? summary.mean : summary.median
+        if (fillValue === null) {
+          return { appliedCount: 0, skippedCount: missingRowIndexes.length }
+        }
+
+        missingRowIndexes.forEach((rowIndex) => pushFill(rowIndex, fillValue))
+      }
+
+      applyCellChanges(changes)
 
       return { appliedCount, skippedCount }
     },

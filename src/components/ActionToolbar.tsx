@@ -7,11 +7,13 @@ import { ModalPortal } from './ModalPortal'
 import { QcReportModal } from './QcReportModal'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { AuditReasonInput } from '../store/useDataInspectorStore'
-import type { CellMark } from '../types/data'
+import type { CellMark, ImputationMethod } from '../types/data'
+import { IMPUTATION_METHOD_OPTIONS } from '../types/data'
 import { hasCompleteAuditReason } from '../utils/auditReason'
-import { makeCellId } from '../utils/cellId'
+import { makeCellId, parseCellId } from '../utils/cellId'
+import { getVisibleColumnValues } from '../utils/chartData'
 import { buildAuditLogCsv, buildCleanedCsv, downloadCsv, downloadHighlightedXlsxWorkbook } from '../utils/exportCsv'
-import { findNumericColumns } from '../utils/numeric'
+import { findNumericColumns, getEffectiveValue, isMissing } from '../utils/numeric'
 
 type ExportType = 'csv' | 'xlsx'
 type ExportStatus = 'idle' | 'preparing' | 'applying' | 'creating' | 'ready' | 'failed'
@@ -20,6 +22,7 @@ type PendingCleaningAction =
   | { kind: 'blankSelected'; count: number }
   | { kind: 'blankProblem'; count: number }
   | { kind: 'blankReview'; count: number }
+  | { kind: 'impute'; method: ImputationMethod; count: number }
 
 const reasonCategories = [
   'Measurement error',
@@ -40,6 +43,7 @@ const CHIP_ICONS: Partial<Record<string, IconName>> = {
   keep: 'check-circle',
   custom: 'palette',
   blanked: 'eraser',
+  imputed: 'fill',
 }
 
 function CountChip({ label, value, tone }: { label: string; value: number; tone?: string }) {
@@ -79,9 +83,11 @@ export function ActionToolbar() {
     cellState,
     auditLog,
     undoStack,
+    transformHistory,
     replaceSelectedTargets,
     blankSelectedTargets,
     blankMarkedInCurrentColumn,
+    imputeMissingValues,
     undoLastActionGroup,
   } = useDataInspectorStore()
   const [replacementValue, setReplacementValue] = useState('')
@@ -124,6 +130,7 @@ export function ActionToolbar() {
       keep: 0,
       custom: 0,
       blanked: 0,
+      imputed: 0,
     }
     const nextSheetCounts = { ...emptyCounts }
     const nextSelectedColumnCounts = { ...emptyCounts }
@@ -157,6 +164,31 @@ export function ActionToolbar() {
 
     return findNumericColumns(sheet.rows, sheet.columns).includes(selectedColumn)
   }, [selectedColumn, sheet])
+
+  const { imputeTargetCount, hasNonMissingValues } = useMemo(() => {
+    if (!sheet || !selectedColumn) {
+      return { imputeTargetCount: 0, hasNonMissingValues: false }
+    }
+
+    const columnTargetIds = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)])
+    const rowIndexes = Array.from(columnTargetIds)
+      .filter((cellId) => {
+        const parsed = parseCellId(cellId)
+        return parsed.sheetName === sheet.name && parsed.columnName === selectedColumn
+      })
+      .map((cellId) => parseCellId(cellId).rowIndex)
+    const candidateRowIndexes = rowIndexes.length > 0 ? rowIndexes : sheet.rows.map((_, rowIndex) => rowIndex)
+
+    const missingCount = candidateRowIndexes.filter((rowIndex) => {
+      const cellId = makeCellId(sheet.name, rowIndex, selectedColumn)
+      return isMissing(getEffectiveValue(sheet.rows[rowIndex]?.[selectedColumn], cellState[cellId]))
+    }).length
+
+    return {
+      imputeTargetCount: missingCount,
+      hasNonMissingValues: getVisibleColumnValues(sheet, selectedColumn, cellState).length > 0,
+    }
+  }, [cellState, previewCells, selectedCells, selectedColumn, sheet])
 
   function parseReplacementValue(): string | number | null {
     const trimmed = replacementValue.trim()
@@ -215,7 +247,12 @@ export function ActionToolbar() {
       return `Apply blanking to ${pendingAction.count.toLocaleString()} problem value${pendingAction.count === 1 ? '' : 's'}`
     }
 
-    return `Apply blanking to ${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'}`
+    if (pendingAction.kind === 'blankReview') {
+      return `Apply blanking to ${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'}`
+    }
+
+    const methodLabel = IMPUTATION_METHOD_OPTIONS.find((option) => option.value === pendingAction.method)?.label ?? 'fill'
+    return `${methodLabel} for ${pendingAction.count.toLocaleString()} missing value${pendingAction.count === 1 ? '' : 's'}`
   }
 
   function pendingActionHelper(): string {
@@ -229,6 +266,10 @@ export function ActionToolbar() {
 
     if (pendingAction.kind === 'blankSelected') {
       return 'Selected and previewed values will be blanked in the cleaned export. Rows are not deleted.'
+    }
+
+    if (pendingAction.kind === 'impute') {
+      return 'Only currently missing cells (selected, previewed, or across the whole column) are filled. Cells that already have a value are never touched. Raw data stays unchanged.'
     }
 
     return 'Matching values in the active sheet and selected column will be blanked in the cleaned export. Rows are not deleted.'
@@ -260,10 +301,19 @@ export function ActionToolbar() {
       setReplacementMessage(
         `${pendingAction.count.toLocaleString()} problem value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
       )
-    } else {
+    } else if (pendingAction.kind === 'blankReview') {
       blankMarkedInCurrentColumn('review', reason)
       setReplacementMessage(
         `${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else {
+      const { appliedCount, skippedCount } = imputeMissingValues(pendingAction.method, reason)
+      const skipNote =
+        pendingAction.method === 'interpolate' && skippedCount > 0
+          ? ` (${skippedCount.toLocaleString()} not filled: no neighbor)`
+          : ''
+      setReplacementMessage(
+        `${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'} filled.${skipNote}`,
       )
     }
 
@@ -406,6 +456,7 @@ export function ActionToolbar() {
           <CountChip label="Accepted" value={sheetCounts.keep} tone="keep" />
           <CountChip label="Custom" value={sheetCounts.custom} tone="custom" />
           <CountChip label="Blanked" value={sheetCounts.blanked} tone="blanked" />
+          <CountChip label="Imputed" value={sheetCounts.imputed} tone="imputed" />
         </div>
       </section>
 
@@ -481,6 +532,35 @@ export function ActionToolbar() {
             <Icon name="undo" />
             Undo last action
           </button>
+        </div>
+      </section>
+
+      <section className="action-section">
+        <SectionHeader
+          title="Fill missing values"
+          help="Fills only cells that are currently missing -- selected or previewed missing cells if you have a selection, otherwise every missing cell in the current column. Cells that already have a value are never touched. Raw data stays unchanged; this is a controlled overlay like replace and blank."
+        />
+        <div className="button-group">
+          <p className="hint compact-help">
+            {imputeTargetCount.toLocaleString()} missing value{imputeTargetCount === 1 ? '' : 's'} eligible in{' '}
+            {selectedColumn || 'the current column'}.
+          </p>
+          {IMPUTATION_METHOD_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => openReasonPrompt({ kind: 'impute', method: option.value, count: imputeTargetCount })}
+              disabled={imputeTargetCount === 0 || !hasNonMissingValues}
+              title={
+                option.value === 'interpolate'
+                  ? 'Interpolates each missing value from the nearest non-missing values above and below it in row order. Cells at a column edge with no neighbor on one side are skipped.'
+                  : `Fills each missing value with the column's current ${option.value}, computed from its currently visible (non-blanked) numeric values.`
+              }
+            >
+              <Icon name="fill" />
+              {option.label}
+            </button>
+          ))}
         </div>
       </section>
 
@@ -607,6 +687,7 @@ export function ActionToolbar() {
           workbook={workbook}
           cellState={cellState}
           auditLog={auditLog}
+          transformHistory={transformHistory}
           onClose={() => setShowQcReport(false)}
         />
       ) : null}

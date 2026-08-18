@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { AuditAction, CellState, RawCellValue, SheetData, WorkbookData } from '../types/data'
+import type { AuditAction, CellState, NormalityTestResult, RawCellValue, SheetData, WorkbookData } from '../types/data'
 import { actionLabel } from './auditReason'
 import { makeCellId } from './cellId'
 import { getDisplayValue, getEffectiveValue } from './numeric'
@@ -93,6 +93,10 @@ function cellFill(state?: CellState): PatternFill | undefined {
     return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBF7D0' } }
   }
 
+  if (state.mark === 'imputed') {
+    return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBAE6FD' } }
+  }
+
   if (state.mark === 'custom') {
     return {
       type: 'pattern',
@@ -102,6 +106,16 @@ function cellFill(state?: CellState): PatternFill | undefined {
   }
 
   return undefined
+}
+
+function normalityVerdictLabel(result: NormalityTestResult | null, threshold: number): string {
+  if (!result) {
+    return '-'
+  }
+  if (result.pValue === null) {
+    return 'Not computed'
+  }
+  return result.pValue > threshold ? 'Fails to reject normality' : 'Rejects normality'
 }
 
 function isSafeNumericString(value: string): boolean {
@@ -265,6 +279,7 @@ export function buildQcReportCsv(report: QcReport): string {
     { Action: 'Custom highlight', Count: report.breakdown.custom },
     { Action: 'Blanked', Count: report.breakdown.blanked },
     { Action: 'Replaced', Count: report.breakdown.replaced },
+    { Action: 'Imputed', Count: report.breakdown.imputed },
   ]
   const breakdownCsv = rowsToCsv(breakdownRows, ['Action', 'Count'])
 
@@ -274,25 +289,44 @@ export function buildQcReportCsv(report: QcReport): string {
       Column: stat.columnName,
       Stage: 'Before',
       Count: stat.before.count,
+      Missing: stat.before.missingCount,
       Mean: formatNumber(stat.before.mean),
       Median: formatNumber(stat.before.median),
       SD: formatNumber(stat.before.standardDeviation),
       Min: formatNumber(stat.before.min),
       Max: formatNumber(stat.before.max),
+      Skewness: formatNumber(stat.skewnessBefore),
+      'Normality verdict': normalityVerdictLabel(stat.normalityBefore, report.normalityThreshold),
     },
     {
       Sheet: stat.sheetName,
       Column: stat.columnName,
       Stage: 'After',
       Count: stat.after.count,
+      Missing: stat.after.missingCount,
       Mean: formatNumber(stat.after.mean),
       Median: formatNumber(stat.after.median),
       SD: formatNumber(stat.after.standardDeviation),
       Min: formatNumber(stat.after.min),
       Max: formatNumber(stat.after.max),
+      Skewness: formatNumber(stat.skewnessAfter),
+      'Normality verdict': normalityVerdictLabel(stat.normalityAfter, report.normalityThreshold),
     },
   ])
-  const statsCsv = rowsToCsv(statsRows, ['Sheet', 'Column', 'Stage', 'Count', 'Mean', 'Median', 'SD', 'Min', 'Max'])
+  const statsCsv = rowsToCsv(statsRows, [
+    'Sheet',
+    'Column',
+    'Stage',
+    'Count',
+    'Missing',
+    'Mean',
+    'Median',
+    'SD',
+    'Min',
+    'Max',
+    'Skewness',
+    'Normality verdict',
+  ])
 
   return [
     '=== Overview ===',

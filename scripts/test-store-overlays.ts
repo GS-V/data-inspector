@@ -96,4 +96,76 @@ state = useDataInspectorStore.getState()
 assert.equal(state.cellState[row2Yield]?.valueOverride, 'not numeric')
 assert.equal(state.auditLog.at(-1)?.reason, 'Replaced selected value with not numeric — Data entry issue — Corrected during review')
 
+// Imputation: mean, median, and linear interpolation (including the no-neighbor edge case).
+const imputeWorkbook: WorkbookData = {
+  fileName: 'impute-test.csv',
+  sheets: [
+    {
+      name: 'Sheet1',
+      columns: ['Value'],
+      rows: [
+        { Value: 10 }, // 0
+        { Value: '' }, // 1 -- between 10 and 30
+        { Value: 30 }, // 2
+        { Value: '' }, // 3 -- between 30 and 60
+        { Value: '' }, // 4 -- between 30 and 60
+        { Value: 60 }, // 5
+        { Value: '' }, // 6 -- trailing edge, no neighbor below
+      ],
+    },
+  ],
+}
+const valueCell = (rowIndex: number) => makeCellId('Sheet1', rowIndex, 'Value')
+
+useDataInspectorStore.getState().setWorkbook(imputeWorkbook)
+useDataInspectorStore.getState().setSelectedColumn('Value')
+let imputeResult = useDataInspectorStore.getState().imputeMissingValues('mean', reason)
+state = useDataInspectorStore.getState()
+assert.equal(imputeResult.appliedCount, 4, 'mean fill applies to all 4 missing cells')
+assert.equal(imputeResult.skippedCount, 0)
+assert.equal(Math.round(Number(state.cellState[valueCell(1)]?.valueOverride) * 100) / 100, 33.33)
+assert.equal(state.cellState[valueCell(1)]?.mark, 'imputed')
+assert.equal(state.auditLog.at(-1)?.actionType, 'impute_mean')
+assert.ok(state.auditLog.at(-1)?.reason.startsWith('Filled with column mean ('))
+
+useDataInspectorStore.getState().setWorkbook(imputeWorkbook)
+useDataInspectorStore.getState().setSelectedColumn('Value')
+imputeResult = useDataInspectorStore.getState().imputeMissingValues('median', reason)
+state = useDataInspectorStore.getState()
+assert.equal(imputeResult.appliedCount, 4)
+assert.equal(state.cellState[valueCell(1)]?.valueOverride, 30, 'median of [10, 30, 60] is 30')
+
+useDataInspectorStore.getState().setWorkbook(imputeWorkbook)
+useDataInspectorStore.getState().setSelectedColumn('Value')
+imputeResult = useDataInspectorStore.getState().imputeMissingValues('interpolate', reason)
+state = useDataInspectorStore.getState()
+assert.equal(imputeResult.appliedCount, 3, 'rows 1, 3, 4 interpolate between their neighbors')
+assert.equal(imputeResult.skippedCount, 1, 'row 6 has no neighbor below and is skipped, not guessed')
+assert.equal(state.cellState[valueCell(1)]?.valueOverride, 20)
+assert.equal(Math.round(Number(state.cellState[valueCell(3)]?.valueOverride) * 100) / 100, 40)
+assert.equal(Math.round(Number(state.cellState[valueCell(4)]?.valueOverride) * 100) / 100, 50)
+assert.equal(state.cellState[valueCell(6)], undefined, 'skipped cell is left completely untouched')
+assert.equal(state.auditLog.at(-1)?.actionType, 'impute_interpolate')
+
+// A cell that already carries a different mark is overwritten to 'imputed', since the value itself changed.
+useDataInspectorStore.getState().setWorkbook(imputeWorkbook)
+useDataInspectorStore.getState().setSelectedColumn('Value')
+useDataInspectorStore.getState().toggleSelectedCell(valueCell(1))
+useDataInspectorStore.getState().markTargets('review')
+useDataInspectorStore.getState().clearSelection()
+useDataInspectorStore.getState().imputeMissingValues('mean', reason)
+state = useDataInspectorStore.getState()
+assert.equal(state.cellState[valueCell(1)]?.mark, 'imputed', 'imputing overwrites a prior review/problem/keep mark')
+
+// A column with zero non-missing values has nothing to compute mean/median/interpolation from.
+const emptyColumnWorkbook: WorkbookData = {
+  fileName: 'impute-empty.csv',
+  sheets: [{ name: 'Sheet1', columns: ['Value'], rows: [{ Value: '' }, { Value: '' }] }],
+}
+useDataInspectorStore.getState().setWorkbook(emptyColumnWorkbook)
+useDataInspectorStore.getState().setSelectedColumn('Value')
+imputeResult = useDataInspectorStore.getState().imputeMissingValues('mean', reason)
+assert.equal(imputeResult.appliedCount, 0)
+assert.equal(imputeResult.skippedCount, 2)
+
 console.log('store-overlays: checks passed')

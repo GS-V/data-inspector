@@ -1,9 +1,11 @@
 import { Fragment, useMemo } from 'react'
 import { Icon } from './Icon'
 import { ModalPortal } from './ModalPortal'
-import type { AuditAction, CellState, WorkbookData } from '../types/data'
+import { NORMALITY_TEST_LABELS, normalityVerdict } from './NormalityResult'
+import type { AuditAction, CellState, TransformAttempt, WorkbookData } from '../types/data'
 import { actionIconName } from '../utils/auditReason'
 import { buildQcReport } from '../utils/qcReport'
+import type { QcColumnStat } from '../utils/qcReport'
 import { buildQcReportCsv, downloadCsv } from '../utils/exportCsv'
 import { formatNumber } from '../utils/stats'
 
@@ -15,18 +17,38 @@ function formatPercent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`
 }
 
+function NormalityCell({
+  result,
+  threshold,
+}: {
+  result: QcColumnStat['normalityBefore']
+  threshold: number
+}) {
+  if (!result) {
+    return <span className="hint">-</span>
+  }
+
+  const { label, tone } = normalityVerdict(result, threshold)
+  return <span className={`normality-badge normality-badge-${tone}`}>{label}</span>
+}
+
 export function QcReportModal({
   workbook,
   cellState,
   auditLog,
+  transformHistory,
   onClose,
 }: {
   workbook: WorkbookData
   cellState: Record<string, CellState>
   auditLog: AuditAction[]
+  transformHistory: TransformAttempt[]
   onClose: () => void
 }) {
-  const report = useMemo(() => buildQcReport(workbook, cellState, auditLog), [workbook, cellState, auditLog])
+  const report = useMemo(
+    () => buildQcReport(workbook, cellState, auditLog, transformHistory),
+    [workbook, cellState, auditLog, transformHistory],
+  )
   const multiSheet = report.sheetSummaries.length > 1
 
   function exportPdf() {
@@ -126,11 +148,19 @@ export function QcReportModal({
               <span><Icon name={actionIconName('replace_value')} className="chip-icon" />Replaced</span>
               <strong>{report.breakdown.replaced}</strong>
             </span>
+            <span className="count-chip imputed">
+              <span><Icon name={actionIconName('impute_mean')} className="chip-icon" />Imputed</span>
+              <strong>{report.breakdown.imputed}</strong>
+            </span>
           </div>
         </section>
 
         <section className="qc-report-section">
           <h3>Before / after statistics</h3>
+          <p className="hint">
+            Normality: {NORMALITY_TEST_LABELS[report.normalityTestType]}, α = {report.normalityThreshold} -- only computed
+            for columns with an applied transform; other columns show &ldquo;-&rdquo;.
+          </p>
           <div className="qc-report-table-wrap">
           <table className="qc-report-table">
             <thead>
@@ -138,11 +168,14 @@ export function QcReportModal({
                 {multiSheet ? <th>Sheet</th> : null}
                 <th>Column</th>
                 <th>Count</th>
+                <th>Missing</th>
                 <th>Mean</th>
                 <th>Median</th>
                 <th>SD</th>
                 <th>Min</th>
                 <th>Max</th>
+                <th>Skewness</th>
+                <th>Normality</th>
               </tr>
             </thead>
             <tbody>
@@ -152,21 +185,27 @@ export function QcReportModal({
                     {multiSheet ? <td>{stat.sheetName}</td> : null}
                     <td>{stat.columnName} <span className="hint">(before)</span></td>
                     <td>{stat.before.count}</td>
+                    <td>{stat.before.missingCount}</td>
                     <td>{formatNumber(stat.before.mean)}</td>
                     <td>{formatNumber(stat.before.median)}</td>
                     <td>{formatNumber(stat.before.standardDeviation)}</td>
                     <td>{formatNumber(stat.before.min)}</td>
                     <td>{formatNumber(stat.before.max)}</td>
+                    <td>{formatNumber(stat.skewnessBefore)}</td>
+                    <td><NormalityCell result={stat.normalityBefore} threshold={report.normalityThreshold} /></td>
                   </tr>
                   <tr>
                     {multiSheet ? <td /> : null}
                     <td className="hint">(after)</td>
                     <td>{stat.after.count}</td>
+                    <td>{stat.after.missingCount}</td>
                     <td>{formatNumber(stat.after.mean)}</td>
                     <td>{formatNumber(stat.after.median)}</td>
                     <td>{formatNumber(stat.after.standardDeviation)}</td>
                     <td>{formatNumber(stat.after.min)}</td>
                     <td>{formatNumber(stat.after.max)}</td>
+                    <td>{formatNumber(stat.skewnessAfter)}</td>
+                    <td><NormalityCell result={stat.normalityAfter} threshold={report.normalityThreshold} /></td>
                   </tr>
                 </Fragment>
               ))}

@@ -53,7 +53,7 @@ function makeAction(
     ),
   ]
 
-  const report = buildQcReport(workbook, {}, auditLog)
+  const report = buildQcReport(workbook, {}, auditLog, [])
   assert.equal(report.breakdown.flagged, 0, 'undone mark_review actions must not be counted')
   checks++
 }
@@ -76,7 +76,7 @@ function makeAction(
     makeAction({ actionType: 'transform_log', cellId: transformedCellId, rowIndex: 1, timestamp: t }),
   ]
 
-  const report = buildQcReport(workbook, cellState, auditLog)
+  const report = buildQcReport(workbook, cellState, auditLog, [])
   assert.equal(report.breakdown.replaced, 1, 'only the replace_value cell should count as replaced')
   assert.equal(report.affectedRows, 1, 'the transformed row must not count as data loss')
   checks++
@@ -92,7 +92,7 @@ function makeAction(
   const cellState: Record<string, CellState> = { [cellId]: { mark: 'keep' } }
   const auditLog: AuditAction[] = [makeAction({ actionType: 'mark_keep', cellId, rowIndex: 0, timestamp: t })]
 
-  const report = buildQcReport(workbook, cellState, auditLog)
+  const report = buildQcReport(workbook, cellState, auditLog, [])
   assert.equal(report.breakdown.accepted, 1)
   assert.equal(report.affectedRows, 0, 'a keep mark with no value change is not data loss')
   checks++
@@ -110,7 +110,7 @@ function makeAction(
     makeAction({ actionType: 'blank_selected', cellId, rowIndex: 0, timestamp: t }),
   ]
 
-  const report = buildQcReport(workbook, cellState, auditLog)
+  const report = buildQcReport(workbook, cellState, auditLog, [])
   assert.equal(report.affectedRows, 1)
   assert.equal(report.keptRowRatio, 0.9)
   checks++
@@ -134,7 +134,7 @@ function makeAction(
     makeAction({ actionType: 'blank_selected', cellId: cellIdB, sheetName: 'SheetB', rowIndex: 0, timestamp: t }),
   ]
 
-  const report = buildQcReport(workbook, cellState, auditLog)
+  const report = buildQcReport(workbook, cellState, auditLog, [])
   assert.equal(report.sheetSummaries.length, 2)
   assert.equal(report.sheetSummaries[0].affectedRows, 1)
   assert.equal(report.sheetSummaries[1].affectedRows, 1)
@@ -146,7 +146,7 @@ function makeAction(
 {
   const sheet = makeSheet('Sheet1', 4)
   const workbook = makeWorkbook([sheet])
-  const report = buildQcReport(workbook, {}, [])
+  const report = buildQcReport(workbook, {}, [], [])
 
   assert.deepEqual(report.breakdown, {
     flagged: 0,
@@ -155,6 +155,7 @@ function makeAction(
     custom: 0,
     blanked: 0,
     replaced: 0,
+    imputed: 0,
   })
   assert.equal(report.keptRowRatio, 1)
   checks++
