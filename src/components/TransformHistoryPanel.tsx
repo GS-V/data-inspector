@@ -1,8 +1,11 @@
+import { useState } from 'react'
+import { Icon } from './Icon'
 import { NORMALITY_TEST_LABELS, NormalitySide } from './NormalityResult'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
-import type { TransformationType } from '../types/data'
+import type { TransformAttempt, TransformationType } from '../types/data'
 import { formatNumber } from '../utils/stats'
 import { TRANSFORM_INFO } from '../utils/transformLabels'
+import { transformToPython, transformToR } from '../utils/transformCode'
 
 function transformTitle(type: TransformationType, lambda?: number): string {
   if (type === 'boxcox') {
@@ -61,6 +64,54 @@ function Sparkline({ before, after }: { before: number[]; after: number[] }) {
   )
 }
 
+function TransformCodeControls({ entry }: { entry: TransformAttempt }) {
+  const [language, setLanguage] = useState<'python' | 'r'>('python')
+  const [copied, setCopied] = useState(false)
+
+  function stopClick(event: { stopPropagation: () => void }) {
+    event.stopPropagation()
+  }
+
+  async function handleCopy(event: React.MouseEvent) {
+    stopClick(event)
+    const code = language === 'python' ? transformToPython(entry) : transformToR(entry)
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="transform-code-row" onClick={stopClick} onKeyDown={stopClick}>
+      <div className="code-lang-toggle" role="group" aria-label="Code language">
+        <button
+          type="button"
+          className={language === 'python' ? 'code-lang-active' : ''}
+          onClick={(event) => {
+            stopClick(event)
+            setLanguage('python')
+          }}
+        >
+          Python
+        </button>
+        <button
+          type="button"
+          className={language === 'r' ? 'code-lang-active' : ''}
+          onClick={(event) => {
+            stopClick(event)
+            setLanguage('r')
+          }}
+        >
+          R
+        </button>
+      </div>
+      <button type="button" className="transform-code-copy" onClick={handleCopy} title="Copy an equivalent code snippet for this transform to the clipboard.">
+        <Icon name="copy" />
+        {copied ? 'Copied!' : 'Copy as code'}
+      </button>
+    </div>
+  )
+}
+
 export function TransformHistoryPanel() {
   const transformHistory = useDataInspectorStore((state) => state.transformHistory)
   const applyColumnTransform = useDataInspectorStore((state) => state.applyColumnTransform)
@@ -76,11 +127,18 @@ export function TransformHistoryPanel() {
             .slice()
             .reverse()
             .map((entry) => (
-              <button
+              <div
                 key={entry.id}
-                type="button"
                 className="transform-history-entry"
+                role="button"
+                tabIndex={0}
                 onClick={() => applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset })
+                  }
+                }}
                 title="Re-apply this transformation as a new step. This does not restore old values."
               >
                 <div className="transform-history-row">
@@ -105,7 +163,8 @@ export function TransformHistoryPanel() {
                     <NormalitySide label="After" result={entry.normalityAfter} threshold={entry.normalityThreshold} />
                   </div>
                 </div>
-              </button>
+                <TransformCodeControls entry={entry} />
+              </div>
             ))}
         </div>
       )}

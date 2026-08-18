@@ -30,6 +30,9 @@
   --blanked-bg: #f1f5f9;
   --blanked-border: #cbd5e1;
   --blanked-text: #475569;
+  --imputed-bg: #bae6fd;
+  --imputed-border: #38bdf8;
+  --imputed-text: #0c4a6e;
   --danger-soft: #fff1f2;
   --danger-text: #9f1239;
   font-family:
@@ -74,6 +77,9 @@
   --blanked-bg: rgba(100, 116, 139, 0.22);
   --blanked-border: rgba(148, 163, 184, 0.46);
   --blanked-text: #cbd5e1;
+  --imputed-bg: rgba(14, 165, 233, 0.22);
+  --imputed-border: rgba(56, 189, 248, 0.62);
+  --imputed-text: #bae6fd;
   --danger-soft: rgba(244, 63, 94, 0.15);
   --danger-text: #fecdd3;
 }

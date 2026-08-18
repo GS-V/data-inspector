@@ -2,7 +2,7 @@ export type IconName =
   | 'flag' | 'alert' | 'check-circle' | 'palette' | 'x-circle'
   | 'outlier' | 'copy' | 'distance' | 'swap' | 'eraser' | 'undo'
   | 'download' | 'clipboard' | 'report' | 'compress' | 'soften' | 'auto' | 'bell'
-  | 'sun' | 'search' | 'eye' | 'folder-open' | 'chevron-down'
+  | 'sun' | 'search' | 'eye' | 'folder-open' | 'chevron-down' | 'fill'
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
   return (
@@ -88,6 +88,10 @@ export function IconSprite() {
       </symbol>
       <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-fill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="4.5" cy="12" r="2" /><circle cx="19.5" cy="12" r="2" /><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+        <line x1="6.7" y1="12" x2="9.7" y2="12" strokeDasharray="2 2" /><line x1="14.3" y1="12" x2="17.3" y2="12" strokeDasharray="2 2" />
       </symbol>
     </svg>
   )

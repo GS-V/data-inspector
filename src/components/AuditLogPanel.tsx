@@ -25,6 +25,9 @@ function actionIconCss(actionType: AuditActionType): string {
     case 'transform_sqrt':
     case 'transform_boxcox':
     case 'transform_zscore': return 'audit-icon-transform'
+    case 'impute_mean':
+    case 'impute_median':
+    case 'impute_interpolate': return 'audit-icon-imputed'
     case 'undo': return 'audit-icon-undo'
   }
 }

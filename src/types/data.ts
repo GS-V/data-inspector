@@ -17,7 +17,7 @@ export type WorkbookData = {
 
 export type CellId = string
 
-export type CellMark = 'review' | 'problem' | 'keep' | 'custom' | 'blanked'
+export type CellMark = 'review' | 'problem' | 'keep' | 'custom' | 'blanked' | 'imputed'
 
 export type CellState = {
   mark?: CellMark
@@ -41,6 +41,9 @@ export type AuditActionType =
   | 'transform_sqrt'
   | 'transform_boxcox'
   | 'transform_zscore'
+  | 'impute_mean'
+  | 'impute_median'
+  | 'impute_interpolate'
   | 'undo'
 
 export type AuditAction = {
@@ -127,6 +130,7 @@ export type NormalityTestResult = {
 export type TransformAttempt = {
   id: string
   type: TransformationType
+  sheetName: string
   columns: string[]
   appliedAt: string
   lambda?: number
@@ -142,5 +146,13 @@ export type TransformAttempt = {
   normalityBefore: NormalityTestResult | null
   normalityAfter: NormalityTestResult | null
 }
+
+export type ImputationMethod = 'mean' | 'median' | 'interpolate'
+
+export const IMPUTATION_METHOD_OPTIONS: { value: ImputationMethod; label: string }[] = [
+  { value: 'mean', label: 'Fill with column mean' },
+  { value: 'median', label: 'Fill with column median' },
+  { value: 'interpolate', label: 'Linear interpolation' },
+]
 
 export const ROW_ORDER_AXIS = '__row_order__'

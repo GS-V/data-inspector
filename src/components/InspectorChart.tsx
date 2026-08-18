@@ -44,6 +44,10 @@ function markColor(state: CellState | undefined, isBlanked: boolean): string {
     return '#22c55e'
   }
 
+  if (state?.mark === 'imputed') {
+    return '#38bdf8'
+  }
+
   return '#3b82f6'
 }
 

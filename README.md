@@ -12,14 +12,24 @@ Open a spreadsheet locally, inspect numeric values, flag or clean outliers, and 
 
 - Opens CSV and XLSX files (including multi-sheet workbooks) locally in the browser.
 - Detects numeric columns automatically while preserving text columns.
-- Displays scatter and distribution views for selected value columns.
+- Displays scatter, histogram, box, violin, Q-Q, density, and cumulative-distribution views for selected value columns.
 - Suggests values for review using configurable tools:
   - Outside typical range / far from average
   - Missing or duplicate values
   - Threshold filters, domain range checks, percentile bounds
 - Applies persistent, labeled highlights (review, problem, accepted, custom color).
 - Supports controlled cleaning overlays — replace or blank selected values without modifying raw data.
-- Exports cleaned CSV/XLSX data and a separate Audit Log CSV.
+- Fills missing values with a column mean, column median, or linear interpolation between the nearest
+  non-missing neighbors — scoped to currently missing cells only, marked distinctly so filled values
+  stay visually and programmatically distinguishable from real measurements.
+- Applies distribution transforms (log, log10, square root, Box-Cox, z-score) to one or more numeric
+  columns, with before/after statistics, skewness, and a normality test (Shapiro-Wilk, Jarque-Bera, or
+  Anderson-Darling) per transform. Each transform-history entry can copy an equivalent one-line pandas
+  (Python) or base R snippet to the clipboard.
+- Generates a QC report summarizing the cleaning breakdown (flagged/problem/accepted/custom/blanked/
+  replaced/imputed counts) and before/after column statistics (count, missing, mean, median, SD, min,
+  max, skewness, and normality verdict for transformed columns), exportable as CSV or PDF.
+- Exports cleaned CSV/XLSX data (highlight colors preserved in XLSX) and a separate Audit Log CSV.
 - Warns before leaving a session with unsaved work.
 
 ---
@@ -176,8 +186,13 @@ Key files:
 npm run lint                  # ESLint
 npm run test:file-risk        # File-risk threshold checks
 npm run test:review-checks    # Review-check utility tests
-npm run test:store-overlays   # Store overlay logic
+npm run test:transform-code   # Copy-as-code (pandas/R) snippet generation
+npm run test:qc-report        # QC report breakdown and column-stat logic
+npm run test:store-overlays   # Store overlay logic (marks, blank, replace, transform, impute)
 npm run test:exports          # Export correctness checks
+npm run test:normality        # Normality test directional/edge-case checks
+npm run test:shapiro-groundtruth        # Shapiro-Wilk vs. scipy ground truth
+npm run test:normality-threshold-clamp  # Normality α threshold clamping
 npm run check:capacity        # Synthetic CSV capacity checks
 ```
 
@@ -196,7 +211,21 @@ See [`docs/qa-checklist.md`](docs/qa-checklist.md) for the manual QA checklist.
 - Intended for moderate local files, not very large datasets.
 - XLSX export produces a clean workbook focused on data and highlight fills; original Excel formatting details are not preserved.
 - Preview tools suggest values for review — they do not automatically clean data.
-- Data edits are controlled overlays, not full spreadsheet editing.
+- Data edits (blank, replace, transform, impute) are controlled overlays, not full spreadsheet editing.
+- Imputation fills the currently-missing (or currently-selected) cells with a column mean, column
+  median, or linear interpolation between the nearest non-missing neighbors — it is not a general
+  statistical imputation engine. There is no uncertainty/variance estimate for filled values, only the
+  column's own currently-visible values are considered, and a missing value at either edge of the
+  column (no neighbor on one side) is left unfilled rather than guessed.
+- The QC report's normality test only runs for columns with an applied transform, to avoid unasked-for
+  computation on every column of a large sheet; skewness and missing-count are computed for all
+  numeric columns regardless.
+- "Copy as code" for a z-score transform applied across several columns in one batch reuses that
+  batch's combined mean/SD on every generated line, rather than recomputing each column's own —
+  matching how the transform's before/after statistics are stored today.
+- Data Inspector is a preprocessing/QC tool, not a statistical analysis platform: transforms, skewness,
+  and normality tests exist to help characterize and clean data before it leaves the browser, not to
+  test hypotheses or draw conclusions about relationships between columns.
 - No session save/load feature yet.
 - No backend, user accounts, sharing, or cloud storage.
 

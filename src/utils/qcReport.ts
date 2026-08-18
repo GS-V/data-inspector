@@ -3,11 +3,22 @@ import type {
   AuditActionType,
   CellState,
   DistributionSummary,
+  NormalityTestResult,
+  NormalityTestType,
   SheetData,
+  TransformAttempt,
   WorkbookData,
 } from '../types/data'
 import { makeCellId, parseCellId } from './cellId'
-import { summarizeColumn } from './stats'
+import { getColumnNumbers, summarizeNumbers } from './stats'
+import { calculateSkewness, runNormalityTest } from './transforms'
+
+// Matches the store's normalityTestType/normalityThreshold defaults (useDataInspectorStore.ts) --
+// the QC report always reports against this fixed default rather than whatever test the user
+// currently has selected in the Transform tools, so the report's verdicts stay reproducible
+// independent of in-session UI state.
+const QC_NORMALITY_TEST_TYPE: NormalityTestType = 'shapiro-wilk'
+const QC_NORMALITY_THRESHOLD = 0.05
 
 export type QcActionBreakdown = {
   flagged: number
@@ -16,6 +27,7 @@ export type QcActionBreakdown = {
   custom: number
   blanked: number
   replaced: number
+  imputed: number
 }
 
 export type QcColumnStat = {
@@ -23,6 +35,12 @@ export type QcColumnStat = {
   columnName: string
   before: DistributionSummary
   after: DistributionSummary
+  skewnessBefore: number | null
+  skewnessAfter: number | null
+  // null means "not run" (column has no transform history), distinct from a NormalityTestResult
+  // whose own statistic/pValue are null because the sample was too small for the test.
+  normalityBefore: NormalityTestResult | null
+  normalityAfter: NormalityTestResult | null
 }
 
 export type QcSheetSummary = {
@@ -41,6 +59,8 @@ export type QcReport = {
   affectedRows: number
   keptRowRatio: number
   columnStats: QcColumnStat[]
+  normalityTestType: NormalityTestType
+  normalityThreshold: number
 }
 
 /**
@@ -93,6 +113,7 @@ function computeSheetBreakdownAndLoss(
     custom: 0,
     blanked: 0,
     replaced: 0,
+    imputed: 0,
   }
   const ambiguousCellIds = new Set<string>()
   const rowAffected = new Array<boolean>(sheet.rows.length).fill(false)
@@ -109,6 +130,10 @@ function computeSheetBreakdownAndLoss(
       else if (state.mark === 'problem') breakdown.problem += 1
       else if (state.mark === 'keep') breakdown.accepted += 1
       else if (state.mark === 'custom') breakdown.custom += 1
+      else if (state.mark === 'imputed') {
+        breakdown.imputed += 1
+        rowAffected[rowIndex] = true
+      }
 
       const isBlanked = state.mark === 'blanked' || state.valueOverride === null
       if (isBlanked) {
@@ -146,23 +171,41 @@ function mergeBreakdown(a: QcActionBreakdown, b: QcActionBreakdown): QcActionBre
     custom: a.custom + b.custom,
     blanked: a.blanked + b.blanked,
     replaced: a.replaced + b.replaced,
+    imputed: a.imputed + b.imputed,
   }
 }
 
 function buildColumnStats(
   sheet: SheetData,
   cellState: Record<string, CellState>,
+  transformedColumnKeys: Set<string>,
 ): QcColumnStat[] {
   return sheet.columns
     .map((columnName) => {
-      const before = summarizeColumn(sheet.rows, sheet.name, columnName, {})
-      const after = summarizeColumn(sheet.rows, sheet.name, columnName, cellState)
+      const beforeNumbers = getColumnNumbers(sheet.rows, sheet.name, columnName, {})
+      const afterNumbers = getColumnNumbers(sheet.rows, sheet.name, columnName, cellState)
+      const before = summarizeNumbers(beforeNumbers.values, beforeNumbers.missingCount)
+      const after = summarizeNumbers(afterNumbers.values, afterNumbers.missingCount)
       // Skip columns with no numeric values at all (e.g. pure text/identifier columns) --
       // a before/after row of all dashes is noise, not information.
       if (before.count === 0 && after.count === 0) {
         return null
       }
-      return { sheetName: sheet.name, columnName, before, after }
+
+      // Only run normality tests on columns the user actually transformed -- running it on
+      // every numeric column in a large sheet would be surprising, uninvited computation.
+      const hasTransform = transformedColumnKeys.has(`${sheet.name}::${columnName}`)
+
+      return {
+        sheetName: sheet.name,
+        columnName,
+        before,
+        after,
+        skewnessBefore: calculateSkewness(beforeNumbers.values),
+        skewnessAfter: calculateSkewness(afterNumbers.values),
+        normalityBefore: hasTransform ? runNormalityTest(beforeNumbers.values, QC_NORMALITY_TEST_TYPE) : null,
+        normalityAfter: hasTransform ? runNormalityTest(afterNumbers.values, QC_NORMALITY_TEST_TYPE) : null,
+      }
     })
     .filter((entry): entry is QcColumnStat => entry !== null)
 }
@@ -171,8 +214,21 @@ export function buildQcReport(
   workbook: WorkbookData,
   cellState: Record<string, CellState>,
   auditLog: AuditAction[],
+  transformHistory: TransformAttempt[],
 ): QcReport {
-  let breakdown: QcActionBreakdown = { flagged: 0, problem: 0, accepted: 0, custom: 0, blanked: 0, replaced: 0 }
+  const transformedColumnKeys = new Set(
+    transformHistory.flatMap((attempt) => attempt.columns.map((columnName) => `${attempt.sheetName}::${columnName}`)),
+  )
+
+  let breakdown: QcActionBreakdown = {
+    flagged: 0,
+    problem: 0,
+    accepted: 0,
+    custom: 0,
+    blanked: 0,
+    replaced: 0,
+    imputed: 0,
+  }
   let totalRows = 0
   let affectedRows = 0
   const sheetSummaries: QcSheetSummary[] = []
@@ -193,7 +249,7 @@ export function buildQcReport(
       affectedRows: sheetAffected,
       keptRowRatio: sheet.rows.length === 0 ? 1 : 1 - sheetAffected / sheet.rows.length,
     })
-    columnStats.push(...buildColumnStats(sheet, cellState))
+    columnStats.push(...buildColumnStats(sheet, cellState, transformedColumnKeys))
   })
 
   return {
@@ -205,5 +261,7 @@ export function buildQcReport(
     affectedRows,
     keptRowRatio: totalRows === 0 ? 1 : 1 - affectedRows / totalRows,
     columnStats,
+    normalityTestType: QC_NORMALITY_TEST_TYPE,
+    normalityThreshold: QC_NORMALITY_THRESHOLD,
   }
 }

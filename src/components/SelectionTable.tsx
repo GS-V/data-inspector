@@ -78,6 +78,9 @@ export function SelectionTable() {
     if (mark === 'custom') {
       return 'Custom'
     }
+    if (mark === 'imputed') {
+      return 'Imputed'
+    }
     return '-'
   }
 

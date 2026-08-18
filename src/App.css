@@ -736,6 +736,10 @@ button:disabled {
   background: var(--blanked-bg);
 }
 
+.count-chip.imputed {
+  background: var(--imputed-bg);
+}
+
 .button-group,
 .mark-grid {
   display: grid;
@@ -1056,6 +1060,12 @@ td:nth-child(7) {
   border-color: var(--blanked-border);
   background: var(--blanked-bg);
   color: var(--blanked-text);
+}
+
+.mark-pill.imputed {
+  border-color: var(--imputed-border);
+  background: var(--imputed-bg);
+  color: var(--imputed-text);
 }
 
 .status-pill.selected {
@@ -2310,6 +2320,7 @@ button {
 .audit-icon-replace { background: var(--accent-soft); color: var(--accent); }
 .audit-icon-clear   { background: var(--panel-subtle); color: var(--muted-text); border: 1px solid var(--border-strong); }
 .audit-icon-undo    { background: var(--panel-subtle); color: var(--muted-text); border: 1px solid var(--border-strong); }
+.audit-icon-imputed { background: var(--imputed-bg); color: var(--imputed-text); }
 
 .audit-entry-id {
   font-size: 11px;
@@ -2595,6 +2606,57 @@ button {
   color: var(--muted-text);
 }
 
+.transform-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.code-lang-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.code-lang-toggle button {
+  min-height: 0;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted-text);
+  background: var(--panel-subtle);
+  border: none;
+  border-radius: 0;
+}
+
+.code-lang-toggle button.code-lang-active {
+  color: var(--strong-text);
+  background: var(--accent-soft);
+}
+
+.transform-code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel-subtle);
+  color: var(--body-text);
+}
+
+.transform-code-copy .icon {
+  width: 13px;
+  height: 13px;
+}
+
 .normality-warning-caption {
   font-size: 9.5px;
   color: var(--muted-text);
@@ -2663,6 +2725,10 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  /* Overrides the generic `table { table-layout: fixed }` rule (used for the Review Queue's
+     fixed 7-column layout) -- this table's column count varies with the report content, so it
+     needs the browser's normal content-based sizing instead of that fixed layout. */
+  table-layout: auto;
 }
 
 .qc-report-table th,
@@ -2670,6 +2736,19 @@ button {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   text-align: left;
+  /* Overrides the generic `th, td { overflow: hidden; text-overflow: ellipsis }` rule, which
+     otherwise truncates these headers/values to invisibility at this table's column count. */
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.qc-report-modal .qc-report-table th,
+.qc-report-modal .qc-report-table td {
+  /* Overrides the generic `th:nth-child(1..6) { width: ...% }` rules (also tuned for the Review
+     Queue table) with the extra ancestor class for specificity, so column widths here are
+     content-driven regardless of position in the table. */
+  width: auto;
 }
 
 @media print {
