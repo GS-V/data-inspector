@@ -4,14 +4,14 @@ import { NORMALITY_TEST_LABELS, NormalitySide } from './NormalityResult'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { TransformAttempt, TransformationType } from '../types/data'
 import { formatNumber } from '../utils/stats'
-import { TRANSFORM_INFO } from '../utils/transformLabels'
+import { transformDisplayLabel } from '../utils/transformLabels'
 import { transformToPython, transformToR } from '../utils/transformCode'
 
-function transformTitle(type: TransformationType, lambda?: number): string {
+function transformTitle(type: TransformationType, lambda?: number, base?: number): string {
   if (type === 'boxcox') {
     return `Box-Cox (λ=${(lambda ?? 1).toFixed(2)})`
   }
-  return TRANSFORM_INFO[type].label
+  return transformDisplayLabel(type, base)
 }
 
 function formatTimestamp(iso: string): string {
@@ -132,18 +132,18 @@ export function TransformHistoryPanel() {
                 className="transform-history-entry"
                 role="button"
                 tabIndex={0}
-                onClick={() => applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset })}
+                onClick={() => applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset, base: entry.base })}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset })
+                    applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset, base: entry.base })
                   }
                 }}
                 title="Re-apply this transformation as a new step. This does not restore old values."
               >
                 <div className="transform-history-row">
                   <div className="transform-history-main">
-                    <strong>{transformTitle(entry.type, entry.lambda)}</strong>
+                    <strong>{transformTitle(entry.type, entry.lambda, entry.base)}</strong>
                     <span className="transform-history-columns">{entry.columns.join(', ')}</span>
                   </div>
                   <Sparkline before={entry.sparkBefore} after={entry.sparkAfter} />

@@ -10,8 +10,8 @@ export const TRANSFORM_INFO: Record<TransformationType, { label: string; effect:
   },
   log10: {
     label: 'Log (base 10)',
-    effect: 'Same idea as natural log, on a base-10 scale',
-    math: 'y = log₁₀(x) = ln(x) / ln(10). Same compression and the same x > 0 requirement as natural log — only the numeric scale of the result differs, not which values pass or how the shape changes.',
+    effect: 'Same idea as natural log, on a chosen base scale',
+    math: 'y = log_b(x) = ln(x) / ln(b), for a base b you choose (default 10). Same compression and the same x > 0 requirement as natural log — only the numeric scale of the result differs, not which values pass or how the shape changes.',
     icon: 'compress',
   },
   sqrt: {
@@ -32,4 +32,12 @@ export const TRANSFORM_INFO: Record<TransformationType, { label: string; effect:
     math: 'y = (x − mean) / SD. Rescales only — mean and SD become 0 and 1 by construction, but the shape of the distribution is unchanged (unlike the other four transforms, which do change shape).',
     icon: 'bell',
   },
+}
+
+/** Display label for an applied transform, reflecting the actual log base used instead of the static default. */
+export function transformDisplayLabel(type: TransformationType, base?: number): string {
+  if (type === 'log10') {
+    return `Log${base ?? 10}`
+  }
+  return TRANSFORM_INFO[type].label
 }

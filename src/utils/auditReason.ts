@@ -29,7 +29,7 @@ export function actionIconName(actionType: AuditActionType): IconName {
   }
 }
 
-export function actionLabel(actionType: AuditActionType, newValue?: unknown): string {
+export function actionLabel(actionType: AuditActionType, newValue?: unknown, base?: number): string {
   switch (actionType) {
     case 'mark_review': return 'Flagged for review'
     case 'mark_problem': return 'Marked as problem'
@@ -41,7 +41,7 @@ export function actionLabel(actionType: AuditActionType, newValue?: unknown): st
     case 'blank_review': return 'Blanked'
     case 'replace_value': return newValue !== null && newValue !== undefined ? `Replaced with ${String(newValue)}` : 'Replaced'
     case 'transform_log': return 'Log transform applied'
-    case 'transform_log10': return 'Log10 transform applied'
+    case 'transform_log10': return `Log${base ?? 10} transform applied`
     case 'transform_sqrt': return 'Square root transform applied'
     case 'transform_boxcox': return 'Box-Cox transform applied'
     case 'transform_zscore': return 'Z-score transform applied'

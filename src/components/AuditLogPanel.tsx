@@ -226,7 +226,7 @@ export function AuditLogPanel({
                           <strong>{action.rowIdentifier}</strong>
                         </div>
                         <div className="audit-entry-detail">
-                          <span>{actionLabel(action.actionType, action.newValue)}</span>
+                          <span>{actionLabel(action.actionType, action.newValue, action.base)}</span>
                           {(action.reasonCategory || action.reasonNote) && (
                             <span className="audit-entry-reason">
                               {action.reasonCategory && <strong>{action.reasonCategory}</strong>}

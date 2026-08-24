@@ -570,6 +570,65 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.xform-card-normalize {
+  cursor: default;
+}
+
+.xform-card-normalize .xform-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.normalize-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.normalize-mode-toggle button {
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted-text);
+  background: var(--panel-subtle);
+  border: none;
+  border-radius: 0;
+}
+
+.normalize-mode-toggle button:not(:first-child) {
+  border-left: 1px solid var(--border-strong);
+}
+
+.normalize-mode-toggle button.normalize-mode-active {
+  color: var(--strong-text);
+  background: var(--accent-soft);
+}
+
+.normalize-mode-toggle button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.normalize-base-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.normalize-base-field span {
+  font-size: 11px;
+  color: var(--muted-text);
+  font-weight: 700;
+}
+
+.normalize-base-field input {
+  width: 60px;
+}
+
 .mini-field {
   display: grid;
   grid-template-columns: auto minmax(60px, 92px);

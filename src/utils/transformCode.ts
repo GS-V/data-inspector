@@ -23,8 +23,16 @@ function pythonLine(entry: TransformAttempt, column: string): string {
   switch (entry.type) {
     case 'log':
       return entry.useOffset ? `${col} = np.log(${col} + 1)` : `${col} = np.log(${col})`
-    case 'log10':
-      return entry.useOffset ? `${col} = np.log10(${col} + 1)` : `${col} = np.log10(${col})`
+    case 'log10': {
+      const base = entry.base ?? 10
+      if (base === 10) {
+        return entry.useOffset ? `${col} = np.log10(${col} + 1)` : `${col} = np.log10(${col})`
+      }
+      const baseCode = formatNumberForCode(base)
+      return entry.useOffset
+        ? `${col} = np.log(${col} + 1) / np.log(${baseCode})`
+        : `${col} = np.log(${col}) / np.log(${baseCode})`
+    }
     case 'sqrt':
       return `${col} = np.sqrt(${col})`
     case 'boxcox': {
@@ -47,8 +55,16 @@ function rLine(entry: TransformAttempt, column: string): string {
   switch (entry.type) {
     case 'log':
       return entry.useOffset ? `${col} <- log(${col} + 1)` : `${col} <- log(${col})`
-    case 'log10':
-      return entry.useOffset ? `${col} <- log10(${col} + 1)` : `${col} <- log10(${col})`
+    case 'log10': {
+      const base = entry.base ?? 10
+      if (base === 10) {
+        return entry.useOffset ? `${col} <- log10(${col} + 1)` : `${col} <- log10(${col})`
+      }
+      const baseCode = formatNumberForCode(base)
+      return entry.useOffset
+        ? `${col} <- log(${col} + 1, base = ${baseCode})`
+        : `${col} <- log(${col}, base = ${baseCode})`
+    }
     case 'sqrt':
       return `${col} <- sqrt(${col})`
     case 'boxcox': {

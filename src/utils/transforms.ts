@@ -6,6 +6,7 @@ export type TransformParams = {
   lambda?: number
   mean?: number
   sd?: number
+  base?: number
 }
 
 function applyLog(value: number, useOffset?: boolean): number | null {
@@ -16,12 +17,16 @@ function applyLog(value: number, useOffset?: boolean): number | null {
   return Math.log(input)
 }
 
-function applyLog10(value: number, useOffset?: boolean): number | null {
+/** Generalized log transform: base 10 uses Math.log10 directly; any other base (> 1) uses the change-of-base identity. */
+function applyLog10(value: number, useOffset?: boolean, base?: number): number | null {
   const input = useOffset ? value + 1 : value
   if (input <= 0) {
     return null
   }
-  return Math.log10(input)
+  if (base === undefined || base === 10) {
+    return Math.log10(input)
+  }
+  return Math.log(input) / Math.log(base)
 }
 
 function applySqrt(value: number): number | null {
@@ -51,7 +56,7 @@ export function transformValue(value: number, type: TransformationType, params?:
     case 'log':
       return applyLog(value, params?.useOffset)
     case 'log10':
-      return applyLog10(value, params?.useOffset)
+      return applyLog10(value, params?.useOffset, params?.base)
     case 'sqrt':
       return applySqrt(value)
     case 'boxcox':

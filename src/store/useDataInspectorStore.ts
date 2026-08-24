@@ -32,6 +32,7 @@ type CellChange = {
   reasonCategory?: string
   reasonNote?: string
   methodContext?: string
+  base?: number
 }
 
 export type AuditReasonInput = {
@@ -54,6 +55,8 @@ type DataInspectorState = {
   transformHistory: TransformAttempt[]
   normalityTestType: NormalityTestType
   normalityThreshold: number
+  normalizationMode: 'none' | 'log' | 'zscore'
+  logBase: number
   setWorkbook: (workbook: WorkbookData) => void
   setActiveSheetName: (sheetName: string) => void
   setSelectedColumn: (columnName: string) => void
@@ -72,7 +75,7 @@ type DataInspectorState = {
   applyColumnTransform: (
     columnNames: string[],
     type: TransformationType,
-    params?: { useOffset?: boolean; lambda?: number },
+    params?: { useOffset?: boolean; lambda?: number; base?: number },
   ) => { appliedCount: number; skippedCount: number }
   imputeMissingValues: (
     method: ImputationMethod,
@@ -81,6 +84,8 @@ type DataInspectorState = {
   setNormalityTestType: (type: NormalityTestType) => void
   setNormalityThreshold: (threshold: number) => void
   checkColumnNormality: (columnNames: string[]) => NormalityTestResult | null
+  setNormalizationMode: (mode: 'none' | 'log' | 'zscore') => void
+  setLogBase: (base: number) => void
   undoLastActionGroup: () => void
 }
 
@@ -157,17 +162,17 @@ function transformActionType(type: TransformationType): AuditActionType {
   return 'transform_zscore'
 }
 
-function transformMethod(type: TransformationType): string {
+function transformMethod(type: TransformationType, base?: number): string {
   if (type === 'log') return 'log transform'
-  if (type === 'log10') return 'log10 transform'
+  if (type === 'log10') return `log${base ?? 10} transform`
   if (type === 'sqrt') return 'square root transform'
   if (type === 'boxcox') return 'box-cox transform'
   return 'z-score transform'
 }
 
-function transformReason(type: TransformationType, columnName: string, lambda?: number): string {
+function transformReason(type: TransformationType, columnName: string, lambda?: number, base?: number): string {
   if (type === 'log') return `Applied natural log transformation to column ${columnName}`
-  if (type === 'log10') return `Applied log10 transformation to column ${columnName}`
+  if (type === 'log10') return `Applied log${base ?? 10} transformation to column ${columnName}`
   if (type === 'sqrt') return `Applied square root transformation to column ${columnName}`
   if (type === 'boxcox') return `Applied Box-Cox transformation (λ=${(lambda ?? 1).toFixed(2)}) to column ${columnName}`
   return `Applied z-score transformation to column ${columnName}`
@@ -274,6 +279,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         reasonNote: change.reasonNote,
         methodContext: change.methodContext,
         rowIdentifier,
+        base: change.base,
       })
     })
 
@@ -317,6 +323,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     transformHistory: [],
     normalityTestType: 'shapiro-wilk',
     normalityThreshold: 0.05,
+    normalizationMode: 'none',
+    logBase: 10,
 
     setWorkbook: (workbook) => {
       const firstSheet = workbook.sheets[0]
@@ -531,6 +539,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       )
 
       const lambda = params?.lambda ?? 1
+      const base = type === 'log10' ? (params?.base ?? 10) : undefined
       const changes: CellChange[] = []
       let appliedCount = 0
       let skippedCount = 0
@@ -551,6 +560,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             lambda,
             mean,
             sd,
+            base,
           })
 
           if (transformed === null || !Number.isFinite(transformed)) {
@@ -570,8 +580,9 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
             cellId: entry.cellId,
             nextState,
             actionType: transformActionType(type),
-            method: transformMethod(type),
-            reason: transformReason(type, columnName, lambda),
+            method: transformMethod(type, base),
+            reason: transformReason(type, columnName, lambda, base),
+            base,
           })
           appliedCount += 1
         })
@@ -597,6 +608,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         appliedAt: new Date().toISOString(),
         lambda: type === 'boxcox' ? lambda : undefined,
         useOffset: params?.useOffset,
+        base,
         statsBefore: summarizeNumbers(beforeValues, 0),
         statsAfter: summarizeNumbers(afterValues, 0),
         skewnessBefore: calculateSkewness(beforeValues),
@@ -734,6 +746,15 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         return null
       }
       return runNormalityTest(values, state.normalityTestType)
+    },
+
+    setNormalizationMode: (mode) => set({ normalizationMode: mode }),
+
+    setLogBase: (base) => {
+      if (!Number.isFinite(base) || base <= 1) {
+        return
+      }
+      set({ logBase: base })
     },
 
     undoLastActionGroup: () => {

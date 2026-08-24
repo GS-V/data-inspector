@@ -65,6 +65,8 @@ export type AuditAction = {
   reasonNote?: string
   methodContext?: string
   rowIdentifier: string
+  /** Log base used, when actionType is transform_log10 with a non-default base. */
+  base?: number
 }
 
 export type PreviewCell = {
@@ -135,6 +137,8 @@ export type TransformAttempt = {
   appliedAt: string
   lambda?: number
   useOffset?: boolean
+  /** Log base used when type is 'log10'; defaults to 10 when absent (older history entries). */
+  base?: number
   statsBefore: DistributionSummary
   statsAfter: DistributionSummary
   skewnessBefore: number | null

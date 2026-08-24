@@ -18,7 +18,7 @@ import { makeCellId } from '../utils/cellId'
 import { findNumericColumns, getDisplayValue, getEffectiveValue, toNumber } from '../utils/numeric'
 import { duplicateValueKeys, percentileBounds } from '../utils/reviewChecks'
 import { formatNumber, summarizeColumn } from '../utils/stats'
-import { TRANSFORM_INFO } from '../utils/transformLabels'
+import { TRANSFORM_INFO, transformDisplayLabel } from '../utils/transformLabels'
 import {
   estimateOptimalBoxCoxLambda,
   getColumnNumericValues,
@@ -30,6 +30,7 @@ type InfeasibleDialogState = {
   type: TransformationType
   columns: string[]
   lambda?: number
+  base?: number
   zeroNegativeCount: number
   totalCount: number
   issues: string[]
@@ -56,6 +57,10 @@ export function InspectionTools() {
     setNormalityTestType,
     setNormalityThreshold,
     checkColumnNormality,
+    normalizationMode,
+    logBase,
+    setNormalizationMode,
+    setLogBase,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -74,6 +79,7 @@ export function InspectionTools() {
   const [boxcoxAutoOptimize, setBoxcoxAutoOptimize] = useState(true)
   const [boxcoxLambda, setBoxcoxLambda] = useState('1.00')
   const [offsetChoice, setOffsetChoice] = useState<'skip' | 'offset'>('skip')
+  const [logBaseInput, setLogBaseInput] = useState(String(logBase))
   const [infeasibleDialog, setInfeasibleDialog] = useState<InfeasibleDialogState | null>(null)
   const [normalityCheck, setNormalityCheck] = useState<{ columns: string[]; result: NormalityTestResult } | null>(null)
 
@@ -129,9 +135,15 @@ export function InspectionTools() {
     )
   }
 
-  function finalizeTransform(type: TransformationType, columns: string[], lambda: number | undefined, useOffset: boolean) {
-    const { appliedCount, skippedCount } = applyColumnTransform(columns, type, { lambda, useOffset })
-    let text = `${TRANSFORM_INFO[type].label} applied to ${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'}${
+  function finalizeTransform(
+    type: TransformationType,
+    columns: string[],
+    lambda: number | undefined,
+    useOffset: boolean,
+    base?: number,
+  ) {
+    const { appliedCount, skippedCount } = applyColumnTransform(columns, type, { lambda, useOffset, base })
+    let text = `${transformDisplayLabel(type, base)} applied to ${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'}${
       skippedCount > 0 ? ` (${skippedCount.toLocaleString()} skipped)` : ''
     } across ${columns.length.toLocaleString()} column${columns.length === 1 ? '' : 's'}.`
     if (plotType === 'scatter') {
@@ -141,7 +153,7 @@ export function InspectionTools() {
     setInfeasibleDialog(null)
   }
 
-  function runTransform(type: TransformationType) {
+  function runTransform(type: TransformationType, base?: number) {
     if (!sheet || targetColumns.length === 0) {
       setMessage('Choose at least one numeric column to transform.')
       return
@@ -168,6 +180,7 @@ export function InspectionTools() {
         type,
         columns: targetColumns,
         lambda,
+        base,
         zeroNegativeCount: feasibility.zeroNegativeCount,
         totalCount: combinedValues.length,
         issues: feasibility.issues,
@@ -175,19 +188,43 @@ export function InspectionTools() {
       return
     }
 
-    finalizeTransform(type, targetColumns, lambda, false)
+    finalizeTransform(type, targetColumns, lambda, false, base)
   }
 
   function confirmInfeasibleTransform() {
     if (!infeasibleDialog) {
       return
     }
-    finalizeTransform(infeasibleDialog.type, infeasibleDialog.columns, infeasibleDialog.lambda, offsetChoice === 'offset')
+    finalizeTransform(
+      infeasibleDialog.type,
+      infeasibleDialog.columns,
+      infeasibleDialog.lambda,
+      offsetChoice === 'offset',
+      infeasibleDialog.base,
+    )
   }
 
   function cancelInfeasibleTransform() {
     setInfeasibleDialog(null)
     setMessage('Transform canceled. No values were changed.')
+  }
+
+  function handleNormalizeClick(nextMode: 'none' | 'log' | 'zscore') {
+    setNormalizationMode(nextMode)
+    if (nextMode === 'none') {
+      return
+    }
+    if (nextMode === 'zscore') {
+      runTransform('zscore')
+      return
+    }
+    const parsedBase = Number(logBaseInput)
+    if (!Number.isFinite(parsedBase) || parsedBase <= 1) {
+      setMessage('Log base must be a number greater than 1.')
+      return
+    }
+    setLogBase(parsedBase)
+    runTransform('log10', parsedBase)
   }
 
   function buildPreview(
@@ -683,24 +720,118 @@ export function InspectionTools() {
         <div className="tool-block">
           <div className="tool-block-summary">Apply transformation</div>
           <div className="transform-grid">
-            {(Object.keys(TRANSFORM_INFO) as TransformationType[]).map((type) => {
-              const isZScore = type === 'zscore'
-              const isDisabled = isZScore ? zScoreDisabled : transformDisabled
+            {(() => {
+              const info = TRANSFORM_INFO.log
+              return (
+                <div
+                  key="log"
+                  className="xform-card"
+                  role="button"
+                  tabIndex={transformDisabled ? -1 : 0}
+                  aria-disabled={transformDisabled}
+                  onClick={() => {
+                    if (transformDisabled) return
+                    runTransform('log')
+                  }}
+                  onKeyDown={(event) => {
+                    if (transformDisabled) return
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      runTransform('log')
+                    }
+                  }}
+                >
+                  <span className="icon-wrap">
+                    <Icon name={info.icon} />
+                  </span>
+                  <span className="xform-card-body">
+                    <span className="xform-card-title-row">
+                      <strong>{info.label}</strong>
+                      <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                        <InfoTip label={info.math} />
+                      </span>
+                    </span>
+                    <span className="xform-card-effect">{info.effect}</span>
+                  </span>
+                </div>
+              )
+            })()}
+            <div className="xform-card xform-card-normalize" aria-label="Normalize">
+              <span className="icon-wrap">
+                <Icon name="compress" />
+              </span>
+              <span className="xform-card-body">
+                <span className="xform-card-title-row">
+                  <strong>Normalize</strong>
+                  <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                    <InfoTip label="Choose how this column is rescaled. Log: y = log_b(x) = ln(x) / ln(b), requires x > 0. Z-score: y = (x − mean) / SD, for comparing columns. Clicking a mode applies it immediately." />
+                  </span>
+                </span>
+                <div className="normalize-mode-toggle" role="group" aria-label="Normalization mode">
+                  <button
+                    type="button"
+                    className={normalizationMode === 'none' ? 'normalize-mode-active' : ''}
+                    onClick={() => handleNormalizeClick('none')}
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    className={normalizationMode === 'log' ? 'normalize-mode-active' : ''}
+                    disabled={transformDisabled}
+                    title="y = log_b(x) = ln(x) / ln(b), requires x > 0."
+                    onClick={() => handleNormalizeClick('log')}
+                  >
+                    Log
+                  </button>
+                  <button
+                    type="button"
+                    className={normalizationMode === 'zscore' ? 'normalize-mode-active' : ''}
+                    disabled={zScoreDisabled}
+                    title={zScoreTitle}
+                    onClick={() => handleNormalizeClick('zscore')}
+                  >
+                    Z-score
+                  </button>
+                </div>
+                {normalizationMode === 'log' ? (
+                  <label
+                    className="normalize-base-field"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <span>Base</span>
+                    <input
+                      value={logBaseInput}
+                      onChange={(event) => setLogBaseInput(event.target.value)}
+                      placeholder="10"
+                    />
+                  </label>
+                ) : null}
+                <span className="xform-card-effect">
+                  {normalizationMode === 'log'
+                    ? `Log-transforms values on the base you set (values must be > 0)`
+                    : normalizationMode === 'zscore'
+                      ? 'Rescales to mean 0, SD 1 — for comparing columns'
+                      : 'No normalization applied'}
+                </span>
+              </span>
+            </div>
+            {(['sqrt', 'boxcox'] as const).map((type) => {
               const info = TRANSFORM_INFO[type]
               return (
                 <div
                   key={type}
                   className="xform-card"
                   role="button"
-                  tabIndex={isDisabled ? -1 : 0}
-                  aria-disabled={isDisabled}
-                  title={isZScore ? zScoreTitle : undefined}
+                  tabIndex={transformDisabled ? -1 : 0}
+                  aria-disabled={transformDisabled}
                   onClick={() => {
-                    if (isDisabled) return
+                    if (transformDisabled) return
                     runTransform(type)
                   }}
                   onKeyDown={(event) => {
-                    if (isDisabled) return
+                    if (transformDisabled) return
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
                       runTransform(type)
@@ -811,7 +942,7 @@ export function InspectionTools() {
               </div>
             </div>
             <div className="reason-modal-action">
-              {`${TRANSFORM_INFO[infeasibleDialog.type].label} on ${infeasibleDialog.columns.length.toLocaleString()} column${
+              {`${transformDisplayLabel(infeasibleDialog.type, infeasibleDialog.base)} on ${infeasibleDialog.columns.length.toLocaleString()} column${
                 infeasibleDialog.columns.length === 1 ? '' : 's'
               }`}
             </div>
