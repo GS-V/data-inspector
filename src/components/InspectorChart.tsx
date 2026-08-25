@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Plot from 'react-plotly.js'
 import { Icon } from './Icon'
+import { TableView } from './TableView'
 import { useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { CellState } from '../types/data'
 import { ROW_ORDER_AXIS } from '../types/data'
@@ -110,9 +111,29 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     addSelectedCells,
     clearSelection,
     clearPreview,
+    setIsSelecting,
   } = useDataInspectorStore()
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
+
+  // Defers the (potentially heavy) chart computation below by one tick whenever the user picks
+  // a different sheet/column/axis/plot type, so a brief "Rendering chart..." state can paint
+  // before the main thread blocks on it. Deliberately keyed on these four inputs only -- not
+  // cellState -- so routine mark/blank/transform actions elsewhere keep updating this chart in
+  // place with no spinner, since that's ordinary reactive re-rendering, not a new computation
+  // the user asked for.
+  const chartRenderKey = `${activeSheetName}::${selectedColumn}::${xAxis}::${plotType}`
+  const [renderedChartKey, setRenderedChartKey] = useState<string | null>(null)
+  const isComputingChart = Boolean(sheet && selectedColumn) && renderedChartKey !== chartRenderKey
+
+  useEffect(() => {
+    if (!sheet || !selectedColumn || renderedChartKey === chartRenderKey) {
+      return
+    }
+    const timeout = window.setTimeout(() => setRenderedChartKey(chartRenderKey), 0)
+    return () => window.clearTimeout(timeout)
+  }, [chartRenderKey, renderedChartKey, sheet, selectedColumn])
+
   const chartColors =
     theme === 'dark'
       ? {
@@ -137,6 +158,25 @@ export function InspectorChart({ theme }: InspectorChartProps) {
       <section className="panel chart-panel empty-state">
         <strong>Open a file to begin.</strong>
         <span>CSV and XLSX files stay local in this browser session.</span>
+      </section>
+    )
+  }
+
+  if (isComputingChart) {
+    return (
+      <section className="panel chart-panel">
+        <div className="panel-loading-overlay" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          <span>Rendering chart…</span>
+        </div>
+      </section>
+    )
+  }
+
+  if (plotType === 'table') {
+    return (
+      <section className="panel chart-panel data-grid-panel">
+        <TableView sheet={sheet} />
       </section>
     )
   }
@@ -275,9 +315,16 @@ export function InspectorChart({ theme }: InspectorChartProps) {
           onSelected={(event) => {
             const cellIds = eventCellIds(event)
             if (cellIds.length > 0) {
-              clearPreview()
-              clearSelection()
-              addSelectedCells(cellIds)
+              setIsSelecting(true)
+              window.setTimeout(() => {
+                try {
+                  clearPreview()
+                  clearSelection()
+                  addSelectedCells(cellIds)
+                } finally {
+                  setIsSelecting(false)
+                }
+              }, 0)
               return
             }
             setEmptySelectionVersion((version) => version + 1)

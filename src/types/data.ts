@@ -93,6 +93,7 @@ export type DistributionSummary = {
 }
 
 export type PlotType =
+  | 'table'
   | 'scatter'
   | 'histogram'
   | 'box'
@@ -102,6 +103,7 @@ export type PlotType =
   | 'violin'
 
 export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
+  { value: 'table', label: 'Table' },
   { value: 'scatter', label: 'Scatter' },
   { value: 'histogram', label: 'Histogram' },
   { value: 'box', label: 'Box plot' },

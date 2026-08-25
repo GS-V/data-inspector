@@ -115,6 +115,25 @@ function TransformCodeControls({ entry }: { entry: TransformAttempt }) {
 export function TransformHistoryPanel() {
   const transformHistory = useDataInspectorStore((state) => state.transformHistory)
   const applyColumnTransform = useDataInspectorStore((state) => state.applyColumnTransform)
+  const [replayBusyId, setReplayBusyId] = useState<string | null>(null)
+  const [replayError, setReplayError] = useState('')
+
+  function handleReplay(entry: TransformAttempt) {
+    if (replayBusyId) {
+      return
+    }
+    setReplayBusyId(entry.id)
+    setReplayError('')
+    window.setTimeout(() => {
+      try {
+        applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset, base: entry.base })
+      } catch (caughtError) {
+        setReplayError(caughtError instanceof Error ? caughtError.message : 'Replay failed.')
+      } finally {
+        setReplayBusyId(null)
+      }
+    }, 0)
+  }
 
   return (
     <div className="tool-block transform-history">
@@ -126,48 +145,67 @@ export function TransformHistoryPanel() {
           {transformHistory
             .slice()
             .reverse()
-            .map((entry) => (
-              <div
-                key={entry.id}
-                className="transform-history-entry"
-                role="button"
-                tabIndex={0}
-                onClick={() => applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset, base: entry.base })}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    applyColumnTransform(entry.columns, entry.type, { lambda: entry.lambda, useOffset: entry.useOffset, base: entry.base })
-                  }
-                }}
-                title="Re-apply this transformation as a new step. This does not restore old values."
-              >
-                <div className="transform-history-row">
-                  <div className="transform-history-main">
-                    <strong>{transformTitle(entry.type, entry.lambda, entry.base)}</strong>
-                    <span className="transform-history-columns">{entry.columns.join(', ')}</span>
+            .map((entry) => {
+              const isBusy = replayBusyId === entry.id
+              const isDisabled = replayBusyId !== null
+              return (
+                <div
+                  key={entry.id}
+                  className="transform-history-entry"
+                  role="button"
+                  tabIndex={isDisabled ? -1 : 0}
+                  aria-disabled={isDisabled}
+                  onClick={() => {
+                    if (isDisabled) return
+                    handleReplay(entry)
+                  }}
+                  onKeyDown={(event) => {
+                    if (isDisabled) return
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      handleReplay(entry)
+                    }
+                  }}
+                  title="Re-apply this transformation as a new step. This does not restore old values."
+                >
+                  <div className="transform-history-row">
+                    <div className="transform-history-main">
+                      <strong>
+                        {isBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
+                        {transformTitle(entry.type, entry.lambda, entry.base)}
+                      </strong>
+                      <span className="transform-history-columns">{entry.columns.join(', ')}</span>
+                    </div>
+                    <Sparkline before={entry.sparkBefore} after={entry.sparkAfter} />
                   </div>
-                  <Sparkline before={entry.sparkBefore} after={entry.sparkAfter} />
-                </div>
-                <div className="transform-history-stats">
-                  <span>Skew {formatNumber(entry.skewnessBefore, 2)} → {formatNumber(entry.skewnessAfter, 2)}</span>
-                  <span>Mean {formatNumber(entry.statsBefore.mean, 2)} → {formatNumber(entry.statsAfter.mean, 2)}</span>
-                  <span>SD {formatNumber(entry.statsBefore.standardDeviation, 2)} → {formatNumber(entry.statsAfter.standardDeviation, 2)}</span>
-                  <span className="transform-history-time">{formatTimestamp(entry.appliedAt)}</span>
-                </div>
-                <div className="normality-block">
-                  <div className="normality-header">
-                    {NORMALITY_TEST_LABELS[entry.normalityTestType]}, α = {entry.normalityThreshold}
+                  <div className="transform-history-stats">
+                    <span>Skew {formatNumber(entry.skewnessBefore, 2)} → {formatNumber(entry.skewnessAfter, 2)}</span>
+                    <span>Mean {formatNumber(entry.statsBefore.mean, 2)} → {formatNumber(entry.statsAfter.mean, 2)}</span>
+                    <span>SD {formatNumber(entry.statsBefore.standardDeviation, 2)} → {formatNumber(entry.statsAfter.standardDeviation, 2)}</span>
+                    <span className="transform-history-time">{formatTimestamp(entry.appliedAt)}</span>
                   </div>
-                  <div className="normality-sides">
-                    <NormalitySide label="Before" result={entry.normalityBefore} threshold={entry.normalityThreshold} />
-                    <NormalitySide label="After" result={entry.normalityAfter} threshold={entry.normalityThreshold} />
+                  <div className="normality-block">
+                    <div className="normality-header">
+                      {NORMALITY_TEST_LABELS[entry.normalityTestType]}, α = {entry.normalityThreshold}
+                    </div>
+                    <div className="normality-sides">
+                      <NormalitySide label="Before" result={entry.normalityBefore} threshold={entry.normalityThreshold} />
+                      <NormalitySide label="After" result={entry.normalityAfter} threshold={entry.normalityThreshold} />
+                    </div>
                   </div>
+                  <TransformCodeControls entry={entry} />
                 </div>
-                <TransformCodeControls entry={entry} />
-              </div>
-            ))}
+              )
+            })}
         </div>
       )}
+      {replayError ? <p className="error-text">{replayError}</p> : null}
+      {replayBusyId !== null ? (
+        <div className="panel-loading-overlay" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          <span>Applying transform…</span>
+        </div>
+      ) : null}
     </div>
   )
 }

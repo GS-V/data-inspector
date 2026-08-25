@@ -57,10 +57,6 @@ export function InspectionTools() {
     setNormalityTestType,
     setNormalityThreshold,
     checkColumnNormality,
-    normalizationMode,
-    logBase,
-    setNormalizationMode,
-    setLogBase,
   } = useDataInspectorStore()
   const [threshold, setThreshold] = useState('')
   const [valueFilterMode, setValueFilterMode] = useState<'greater' | 'less' | 'range' | 'percentile'>('greater')
@@ -79,9 +75,14 @@ export function InspectionTools() {
   const [boxcoxAutoOptimize, setBoxcoxAutoOptimize] = useState(true)
   const [boxcoxLambda, setBoxcoxLambda] = useState('1.00')
   const [offsetChoice, setOffsetChoice] = useState<'skip' | 'offset'>('skip')
-  const [logBaseInput, setLogBaseInput] = useState(String(logBase))
+  const [logBaseInput, setLogBaseInput] = useState('10')
   const [infeasibleDialog, setInfeasibleDialog] = useState<InfeasibleDialogState | null>(null)
   const [normalityCheck, setNormalityCheck] = useState<{ columns: string[]; result: NormalityTestResult } | null>(null)
+  const [transformBusyType, setTransformBusyType] = useState<TransformationType | null>(null)
+  const [normalityBusy, setNormalityBusy] = useState(false)
+  const [markBusy, setMarkBusy] = useState<'review' | 'problem' | 'keep' | 'custom' | 'clear' | null>(null)
+  const [logBaseError, setLogBaseError] = useState('')
+  const [previewBusyKey, setPreviewBusyKey] = useState<'outlier' | 'duplicate' | 'zscore' | 'threshold' | null>(null)
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const summary = useMemo(() => {
@@ -113,6 +114,13 @@ export function InspectionTools() {
     ? 'All values are identical; z-score is undefined.'
     : 'Standardizes values using (x - mean) / standard deviation. Values must be numeric.'
 
+  // Live-reflects whatever is currently typed in the Base field, independent of the last
+  // applied base -- the card title tracks this so it updates as the user types, but Apply
+  // (below) re-validates before it ever fires a transform.
+  const parsedLogBase = Number(logBaseInput)
+  const logBaseIsValid = Number.isFinite(parsedLogBase) && parsedLogBase > 1
+  const logBaseTitleValue = Number.isFinite(parsedLogBase) ? parsedLogBase : 10
+
   const targetColumnsKey = targetColumns.join(',')
   const [lastNormalityCheckKey, setLastNormalityCheckKey] = useState(targetColumnsKey)
   if (targetColumnsKey !== lastNormalityCheckKey) {
@@ -125,8 +133,18 @@ export function InspectionTools() {
       setMessage('Choose at least one numeric column to check.')
       return
     }
-    const result = checkColumnNormality(targetColumns)
-    setNormalityCheck(result ? { columns: targetColumns, result } : null)
+    if (normalityBusy) {
+      return
+    }
+    setNormalityBusy(true)
+    window.setTimeout(() => {
+      try {
+        const result = checkColumnNormality(targetColumns)
+        setNormalityCheck(result ? { columns: targetColumns, result } : null)
+      } finally {
+        setNormalityBusy(false)
+      }
+    }, 0)
   }
 
   function toggleBatchColumn(column: string) {
@@ -158,50 +176,66 @@ export function InspectionTools() {
       setMessage('Choose at least one numeric column to transform.')
       return
     }
-
-    let lambda: number | undefined
-    if (type === 'boxcox') {
-      if (boxcoxAutoOptimize) {
-        const combined = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
-        lambda = estimateOptimalBoxCoxLambda(combined)
-        setBoxcoxLambda(lambda.toFixed(2))
-      } else {
-        const parsed = Number(boxcoxLambda)
-        lambda = Number.isFinite(parsed) ? parsed : 1
-      }
-    }
-
-    const combinedValues = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
-    const feasibility = validateTransformFeasibility(combinedValues, type)
-
-    if (!feasibility.feasible) {
-      setOffsetChoice('skip')
-      setInfeasibleDialog({
-        type,
-        columns: targetColumns,
-        lambda,
-        base,
-        zeroNegativeCount: feasibility.zeroNegativeCount,
-        totalCount: combinedValues.length,
-        issues: feasibility.issues,
-      })
+    if (transformBusyType) {
       return
     }
 
-    finalizeTransform(type, targetColumns, lambda, false, base)
+    setTransformBusyType(type)
+    window.setTimeout(() => {
+      try {
+        let lambda: number | undefined
+        if (type === 'boxcox') {
+          if (boxcoxAutoOptimize) {
+            const combined = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
+            lambda = estimateOptimalBoxCoxLambda(combined)
+            setBoxcoxLambda(lambda.toFixed(2))
+          } else {
+            const parsed = Number(boxcoxLambda)
+            lambda = Number.isFinite(parsed) ? parsed : 1
+          }
+        }
+
+        const combinedValues = targetColumns.flatMap((column) => getColumnNumericValues(sheet, column, cellState))
+        const feasibility = validateTransformFeasibility(combinedValues, type)
+
+        if (!feasibility.feasible) {
+          setOffsetChoice('skip')
+          setInfeasibleDialog({
+            type,
+            columns: targetColumns,
+            lambda,
+            base,
+            zeroNegativeCount: feasibility.zeroNegativeCount,
+            totalCount: combinedValues.length,
+            issues: feasibility.issues,
+          })
+          return
+        }
+
+        finalizeTransform(type, targetColumns, lambda, false, base)
+      } catch (caughtError) {
+        setMessage(caughtError instanceof Error ? caughtError.message : 'Transform failed.')
+      } finally {
+        setTransformBusyType(null)
+      }
+    }, 0)
   }
 
   function confirmInfeasibleTransform() {
-    if (!infeasibleDialog) {
+    if (!infeasibleDialog || transformBusyType) {
       return
     }
-    finalizeTransform(
-      infeasibleDialog.type,
-      infeasibleDialog.columns,
-      infeasibleDialog.lambda,
-      offsetChoice === 'offset',
-      infeasibleDialog.base,
-    )
+    const dialog = infeasibleDialog
+    setTransformBusyType(dialog.type)
+    window.setTimeout(() => {
+      try {
+        finalizeTransform(dialog.type, dialog.columns, dialog.lambda, offsetChoice === 'offset', dialog.base)
+      } catch (caughtError) {
+        setMessage(caughtError instanceof Error ? caughtError.message : 'Transform failed.')
+      } finally {
+        setTransformBusyType(null)
+      }
+    }, 0)
   }
 
   function cancelInfeasibleTransform() {
@@ -209,22 +243,51 @@ export function InspectionTools() {
     setMessage('Transform canceled. No values were changed.')
   }
 
-  function handleNormalizeClick(nextMode: 'none' | 'log' | 'zscore') {
-    setNormalizationMode(nextMode)
-    if (nextMode === 'none') {
+  function handleLogApply() {
+    if (!logBaseIsValid) {
+      setLogBaseError('Base must be a number greater than 1.')
       return
     }
-    if (nextMode === 'zscore') {
-      runTransform('zscore')
+    setLogBaseError('')
+    runTransform('log10', parsedLogBase)
+  }
+
+  function handleZScoreApply() {
+    runTransform('zscore')
+  }
+
+  function runMarkAction(kind: 'review' | 'problem' | 'keep' | 'custom' | 'clear', action: () => void) {
+    if (markBusy) {
       return
     }
-    const parsedBase = Number(logBaseInput)
-    if (!Number.isFinite(parsedBase) || parsedBase <= 1) {
-      setMessage('Log base must be a number greater than 1.')
+    setMarkBusy(kind)
+    window.setTimeout(() => {
+      try {
+        action()
+      } finally {
+        setMarkBusy(null)
+      }
+    }, 0)
+  }
+
+  // Shared wrapper for every preview-building button below (each scans the whole column, an
+  // O(rows) pass that's cheap for typical files but noticeable on a large one). Toggling an
+  // already-active preview back off is handled inside buildPreview and is instant either way,
+  // so deferring it too is harmless -- one extra render tick, not a behavior change.
+  function runPreviewAction(key: 'outlier' | 'duplicate' | 'zscore' | 'threshold', action: () => void) {
+    if (previewBusyKey) {
       return
     }
-    setLogBase(parsedBase)
-    runTransform('log10', parsedBase)
+    setPreviewBusyKey(key)
+    window.setTimeout(() => {
+      try {
+        action()
+      } catch (caughtError) {
+        setMessage(caughtError instanceof Error ? caughtError.message : 'Preview failed.')
+      } finally {
+        setPreviewBusyKey(null)
+      }
+    }, 0)
   }
 
   function buildPreview(
@@ -500,20 +563,20 @@ export function InspectionTools() {
           <div className="auto-tool-grid">
             <button
               type="button"
-              onClick={showUnusualValues}
-              disabled={!sheet}
+              onClick={() => runPreviewAction('outlier', showUnusualValues)}
+              disabled={!sheet || previewBusyKey !== null}
               title="Flags values outside the typical spread of this column — below Q1 − 1.5×IQR or above Q3 + 1.5×IQR (Tukey's fence), the standard rule of thumb for outlier screening."
             >
-              <Icon name="outlier" />
+              {previewBusyKey === 'outlier' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="outlier" />}
               Outside typical range
             </button>
             <button
               type="button"
-              onClick={showDuplicateValues}
-              disabled={!sheet}
+              onClick={() => runPreviewAction('duplicate', showDuplicateValues)}
+              disabled={!sheet || previewBusyKey !== null}
               title="Finds repeated non-empty values in this column — most useful for ID, sample, plot, or record columns."
             >
-              <Icon name="copy" />
+              {previewBusyKey === 'duplicate' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="copy" />}
               Duplicate values
             </button>
             <label className="mini-field chart-type-field">
@@ -535,11 +598,11 @@ export function InspectionTools() {
           <div className="z-preview-row" aria-label="Far from average preview settings">
             <button
               type="button"
-              onClick={showZScoreOutliers}
-              disabled={!sheet}
+              onClick={() => runPreviewAction('zscore', showZScoreOutliers)}
+              disabled={!sheet || previewBusyKey !== null}
               title="Flags values whose z-score — z = (x − mean) / SD — is at or beyond the cutoff you set below; e.g. a cutoff of 3 flags anything more than 3 standard deviations from the average."
             >
-              <Icon name="distance" />
+              {previewBusyKey === 'zscore' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="distance" />}
               Far from average
             </button>
             <label className="mini-field">
@@ -607,7 +670,12 @@ export function InspectionTools() {
             ) : (
               <input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder="Value" />
             )}
-            <button type="button" onClick={previewThreshold} disabled={!sheet}>
+            <button
+              type="button"
+              onClick={() => runPreviewAction('threshold', previewThreshold)}
+              disabled={!sheet || previewBusyKey !== null}
+            >
+              {previewBusyKey === 'threshold' ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
               {valueFilterButtonLabel}
             </button>
           </div>
@@ -624,31 +692,31 @@ export function InspectionTools() {
             <button
               type="button"
               className="review-button"
-              onClick={() => markTargets('review')}
-              disabled={targetCount === 0}
+              onClick={() => runMarkAction('review', () => markTargets('review'))}
+              disabled={targetCount === 0 || markBusy !== null}
               title="Yellow highlight. Use for values you want to inspect later."
             >
-              <Icon name="flag" className="review-icon" />
+              {markBusy === 'review' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="flag" className="review-icon" />}
               Flag for review
             </button>
             <button
               type="button"
               className="problem-button"
-              onClick={() => markTargets('problem')}
-              disabled={targetCount === 0}
+              onClick={() => runMarkAction('problem', () => markTargets('problem'))}
+              disabled={targetCount === 0 || markBusy !== null}
               title="Red highlight. Use for values that are likely incorrect."
             >
-              <Icon name="alert" className="problem-icon" />
+              {markBusy === 'problem' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="alert" className="problem-icon" />}
               Mark as problem
             </button>
             <button
               type="button"
               className="keep-button"
-              onClick={() => markTargets('keep')}
-              disabled={targetCount === 0}
+              onClick={() => runMarkAction('keep', () => markTargets('keep'))}
+              disabled={targetCount === 0 || markBusy !== null}
               title="Green highlight. Use for values you reviewed and decided to keep."
             >
-              <Icon name="check-circle" className="keep-icon" />
+              {markBusy === 'keep' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="check-circle" className="keep-icon" />}
               Mark as accepted
             </button>
             <div className="custom-highlight-row">
@@ -661,21 +729,21 @@ export function InspectionTools() {
               />
               <button
                 type="button"
-                onClick={() => markTargets('custom', customColor)}
-                disabled={targetCount === 0}
+                onClick={() => runMarkAction('custom', () => markTargets('custom', customColor))}
+                disabled={targetCount === 0 || markBusy !== null}
                 title="Applies the chosen custom color as a persistent highlight."
               >
-                <Icon name="palette" />
+                {markBusy === 'custom' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="palette" />}
                 Custom color
               </button>
             </div>
             <button
               type="button"
-              onClick={clearTargetMarks}
-              disabled={targetCount === 0}
+              onClick={() => runMarkAction('clear', clearTargetMarks)}
+              disabled={targetCount === 0 || markBusy !== null}
               title="Removes persistent highlight marks from selected or previewed cells. Raw values are not changed."
             >
-              <Icon name="x-circle" />
+              {markBusy === 'clear' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="x-circle" />}
               Remove highlight
             </button>
           </div>
@@ -717,24 +785,26 @@ export function InspectionTools() {
           )}
         </div>
 
-        <div className="tool-block">
+        <div className="tool-block transform-apply-block">
           <div className="tool-block-summary">Apply transformation</div>
           <div className="transform-grid">
             {(() => {
               const info = TRANSFORM_INFO.log
+              const isBusy = transformBusyType === 'log'
+              const isDisabled = transformDisabled || transformBusyType !== null
               return (
                 <div
                   key="log"
                   className="xform-card"
                   role="button"
-                  tabIndex={transformDisabled ? -1 : 0}
-                  aria-disabled={transformDisabled}
+                  tabIndex={isDisabled ? -1 : 0}
+                  aria-disabled={isDisabled}
                   onClick={() => {
-                    if (transformDisabled) return
+                    if (isDisabled) return
                     runTransform('log')
                   }}
                   onKeyDown={(event) => {
-                    if (transformDisabled) return
+                    if (isDisabled) return
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
                       runTransform('log')
@@ -742,7 +812,7 @@ export function InspectionTools() {
                   }}
                 >
                   <span className="icon-wrap">
-                    <Icon name={info.icon} />
+                    {isBusy ? <span className="spinner" aria-hidden="true" /> : <Icon name={info.icon} />}
                   </span>
                   <span className="xform-card-body">
                     <span className="xform-card-title-row">
@@ -757,88 +827,97 @@ export function InspectionTools() {
               )
             })()}
             {/*
-              Normalize card: replaces the former standalone "Log (base 10)" and "Z-Score" xform
-              cards with one None/Log/Z-score control. Log now supports a user-chosen base (not
-              just 10); each mode button both selects and immediately applies that transform, same
-              as the cards it replaced -- "None" is the exception, since there's no data mutation
-              for it to apply, so clicking it only updates which segment is shown as active.
+              Log and Z-score used to share one "Normalize" card with a None/Log/Z-score mode
+              switcher. That control was replaced with two independent cards -- matching how
+              Square Root and Box-Cox already work -- because a shared mode switcher made it
+              easy to fire a transform (or open its confirmation dialog) from an interaction
+              that was only meant to change which mode is selected. Each card below is now
+              self-contained: it never fires a transform except from its own Apply click, so
+              editing the Base field or tabbing through the form can't trigger anything.
+              They're wrapped together so Z-score always renders directly under Log regardless
+              of how many cards fit per row in the grid.
             */}
-            <div className="xform-card xform-card-normalize" aria-label="Normalize">
-              <span className="icon-wrap">
-                <Icon name="compress" />
-              </span>
-              <span className="xform-card-body">
-                <span className="xform-card-title-row">
-                  <strong>Normalize</strong>
-                  <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                    <InfoTip label="Choose how this column is rescaled. Log: y = log_b(x) = ln(x) / ln(b), requires x > 0. Z-score: y = (x − mean) / SD, for comparing columns. Clicking a mode applies it immediately." />
+            <div className="xform-card-pair">
+              <div className="xform-card xform-card-normalize" aria-label="Log (base N)">
+                <span className="icon-wrap">
+                  {transformBusyType === 'log10' ? <span className="spinner" aria-hidden="true" /> : <Icon name="compress" />}
+                </span>
+                <span className="xform-card-body">
+                  <span className="xform-card-title-row">
+                    <strong>{`Log (base ${logBaseTitleValue})`}</strong>
+                    <InfoTip label="y = log_b(x) = ln(x) / ln(b), requires x > 0. Base updates the title as you type it, but nothing is applied until you click Apply." />
                   </span>
+                  <span className="xform-card-effect">Log-transforms values using the base you set (values must be &gt; 0)</span>
+                  <div className="xform-apply-row">
+                    <label className="normalize-base-field">
+                      <span>Base</span>
+                      <input
+                        value={logBaseInput}
+                        onChange={(event) => {
+                          setLogBaseInput(event.target.value)
+                          setLogBaseError('')
+                        }}
+                        placeholder="10"
+                        disabled={transformBusyType !== null}
+                        aria-label="Log base"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="xform-apply-btn"
+                      onClick={handleLogApply}
+                      disabled={transformDisabled || transformBusyType !== null}
+                    >
+                      {transformBusyType === 'log10' ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
+                      Apply
+                    </button>
+                  </div>
+                  {logBaseError ? <p className="error-text">{logBaseError}</p> : null}
                 </span>
-                <div className="normalize-mode-toggle" role="group" aria-label="Normalization mode">
-                  <button
-                    type="button"
-                    className={normalizationMode === 'none' ? 'normalize-mode-active' : ''}
-                    onClick={() => handleNormalizeClick('none')}
-                  >
-                    None
-                  </button>
-                  <button
-                    type="button"
-                    className={normalizationMode === 'log' ? 'normalize-mode-active' : ''}
-                    disabled={transformDisabled}
-                    title="y = log_b(x) = ln(x) / ln(b), requires x > 0."
-                    onClick={() => handleNormalizeClick('log')}
-                  >
-                    Log
-                  </button>
-                  <button
-                    type="button"
-                    className={normalizationMode === 'zscore' ? 'normalize-mode-active' : ''}
-                    disabled={zScoreDisabled}
-                    title={zScoreTitle}
-                    onClick={() => handleNormalizeClick('zscore')}
-                  >
-                    Z-score
-                  </button>
-                </div>
-                {normalizationMode === 'log' ? (
-                  <label
-                    className="normalize-base-field"
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <span>Base</span>
-                    <input
-                      value={logBaseInput}
-                      onChange={(event) => setLogBaseInput(event.target.value)}
-                      placeholder="10"
-                    />
-                  </label>
-                ) : null}
-                <span className="xform-card-effect">
-                  {normalizationMode === 'log'
-                    ? `Log-transforms values on the base you set (values must be > 0)`
-                    : normalizationMode === 'zscore'
-                      ? 'Rescales to mean 0, SD 1 — for comparing columns'
-                      : 'No normalization applied'}
+              </div>
+
+              <div className="xform-card" aria-label="Z-score">
+                <span className="icon-wrap">
+                  {transformBusyType === 'zscore' ? <span className="spinner" aria-hidden="true" /> : <Icon name="bell" />}
                 </span>
-              </span>
+                <span className="xform-card-body">
+                  <span className="xform-card-title-row">
+                    <strong>Z-score</strong>
+                    <InfoTip label={zScoreTitle} />
+                  </span>
+                  <span className="xform-card-effect">Rescales to mean 0, SD 1 — for comparing columns</span>
+                  <div className="xform-apply-row">
+                    <button
+                      type="button"
+                      className="xform-apply-btn"
+                      onClick={handleZScoreApply}
+                      disabled={zScoreDisabled || transformBusyType !== null}
+                      title={zScoreTitle}
+                    >
+                      {transformBusyType === 'zscore' ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
+                      Apply
+                    </button>
+                  </div>
+                </span>
+              </div>
             </div>
             {(['sqrt', 'boxcox'] as const).map((type) => {
               const info = TRANSFORM_INFO[type]
+              const isBusy = transformBusyType === type
+              const isDisabled = transformDisabled || transformBusyType !== null
               return (
                 <div
                   key={type}
                   className="xform-card"
                   role="button"
-                  tabIndex={transformDisabled ? -1 : 0}
-                  aria-disabled={transformDisabled}
+                  tabIndex={isDisabled ? -1 : 0}
+                  aria-disabled={isDisabled}
                   onClick={() => {
-                    if (transformDisabled) return
+                    if (isDisabled) return
                     runTransform(type)
                   }}
                   onKeyDown={(event) => {
-                    if (transformDisabled) return
+                    if (isDisabled) return
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
                       runTransform(type)
@@ -846,7 +925,7 @@ export function InspectionTools() {
                   }}
                 >
                   <span className="icon-wrap">
-                    <Icon name={info.icon} />
+                    {isBusy ? <span className="spinner" aria-hidden="true" /> : <Icon name={info.icon} />}
                   </span>
                   <span className="xform-card-body">
                     <span className="xform-card-title-row">
@@ -861,6 +940,12 @@ export function InspectionTools() {
               )
             })}
           </div>
+          {transformBusyType !== null ? (
+            <div className="panel-loading-overlay" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
+              <span>Applying transform…</span>
+            </div>
+          ) : null}
           <div className="normality-settings-row" aria-label="Box-Cox lambda settings">
             <label className="transform-checkbox-row">
               <input
@@ -918,13 +1003,18 @@ export function InspectionTools() {
             type="button"
             className="check-normality-button"
             onClick={runNormalityCheck}
-            disabled={transformDisabled}
+            disabled={transformDisabled || normalityBusy}
             title="Checks the current values of the target column(s) against the active test and threshold. Does not transform anything."
           >
-            <Icon name="bell" />
+            {normalityBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="bell" />}
             Check normality
           </button>
-          {normalityCheck ? (
+          {normalityBusy ? (
+            <p className="hint normality-computing">
+              <span className="spinner" aria-hidden="true" />
+              Computing…
+            </p>
+          ) : normalityCheck ? (
             <NormalitySide label="Current" result={normalityCheck.result} threshold={normalityThreshold} />
           ) : null}
         </div>
@@ -993,10 +1083,16 @@ export function InspectionTools() {
               .
             </p>
             <div className="modal-actions">
-              <button type="button" onClick={cancelInfeasibleTransform}>
+              <button type="button" onClick={cancelInfeasibleTransform} disabled={transformBusyType !== null}>
                 Cancel
               </button>
-              <button type="button" className="primary-action" onClick={confirmInfeasibleTransform}>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={confirmInfeasibleTransform}
+                disabled={transformBusyType !== null}
+              >
+                {transformBusyType !== null ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
                 Apply transform
               </button>
             </div>

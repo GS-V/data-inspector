@@ -81,7 +81,12 @@ export function FileLoader() {
         </p>
       </div>
       <div className="file-status">
-        {isLoading ? <span className="muted">Reading file...</span> : null}
+        {isLoading ? (
+          <span className="muted file-loading-status">
+            <span className="spinner" aria-hidden="true" />
+            Reading file...
+          </span>
+        ) : null}
         {workbook && loadedFileSize ? <span className="muted">Loaded size: {loadedFileSize}</span> : null}
         {warning ? <span className="warning-text">{warning}</span> : null}
         {workbook?.parseWarnings?.length ? (

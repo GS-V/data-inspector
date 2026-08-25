@@ -125,6 +125,20 @@
   backdrop-filter: blur(14px);
 }
 
+/* Sidebar/action-column panels sit a shade off the raised white cards (chart/table) so the
+   layout reads as layered depth rather than one flat white surface. */
+.controls-panel,
+.tools-panel,
+.privacy-panel {
+  background: var(--sidebar-bg);
+}
+
+/* Right action column gets its own named surface (distinct from the left sidebar's) per the
+   Indigo Mist palette, even though the two currently share the same value. */
+.action-panel {
+  background: var(--color-action-bg);
+}
+
 .panel-title {
   display: flex;
   align-items: center;
@@ -196,7 +210,7 @@
 .guidance-panel {
   padding: 8px 10px;
   color: var(--muted-text);
-  background: color-mix(in srgb, var(--panel-bg) 74%, transparent);
+  background: color-mix(in srgb, var(--sidebar-bg) 74%, transparent);
 }
 
 .guidance-panel summary {
@@ -280,6 +294,12 @@
   font-size: 12px;
 }
 
+.file-loading-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .error-text {
   color: #be123c;
   font-size: 12px;
@@ -356,6 +376,7 @@ textarea {
   padding: 0 9px;
   color: var(--strong-text);
   background: var(--control-bg);
+  border-color: var(--color-border);
   outline: none;
 }
 
@@ -380,8 +401,8 @@ button {
   justify-content: center;
   gap: 8px;
   padding: 0 11px;
-  color: var(--strong-text);
-  background: var(--control-bg);
+  color: var(--button-text);
+  background: var(--button-bg);
   font-weight: 700;
   cursor: pointer;
 }
@@ -418,6 +439,53 @@ button {
   color: var(--accent);
 }
 
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shared loading spinner -- reused by every async/heavy action (transform apply, fill,
+   mark/blank/replace, export, undo, normality checks, chart rendering) instead of introducing
+   a different indicator per feature. */
+.spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner-rotate 0.6s linear infinite;
+}
+
+.button-spinner {
+  margin-right: 2px;
+}
+
+/* Subtle local overlay for a panel/section that's busy -- never full-page, always scoped to
+   the component performing the action via that ancestor's `position: relative`. */
+.panel-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--panel-subtle) 88%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-text);
+  border-radius: inherit;
+  z-index: 2;
+}
+
+.normality-computing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .file-caret-icon {
   width: 12px;
   height: 12px;
@@ -439,7 +507,7 @@ button {
 button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent-text);
-  background: color-mix(in srgb, var(--accent-soft) 48%, var(--control-bg));
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--button-bg));
 }
 
 button:disabled {
@@ -473,6 +541,10 @@ button:disabled {
   gap: 8px;
   padding: 10px 0;
   border-top: 1px solid var(--border);
+}
+
+.transform-apply-block {
+  position: relative;
 }
 
 .workflow-grid {
@@ -564,6 +636,12 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.xform-card-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .xform-card-normalize {
   cursor: default;
 }
@@ -572,39 +650,6 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.normalize-mode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  overflow: hidden;
-  align-self: flex-start;
-}
-
-.normalize-mode-toggle button {
-  min-height: 0;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted-text);
-  background: var(--panel-subtle);
-  border: none;
-  border-radius: 0;
-}
-
-.normalize-mode-toggle button:not(:first-child) {
-  border-left: 1px solid var(--border-strong);
-}
-
-.normalize-mode-toggle button.normalize-mode-active {
-  color: var(--strong-text);
-  background: var(--accent-soft);
-}
-
-.normalize-mode-toggle button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .normalize-base-field {
@@ -621,6 +666,22 @@ button:disabled {
 
 .normalize-base-field input {
   width: 60px;
+}
+
+.xform-apply-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.xform-apply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 0;
+  padding: 4px 12px;
 }
 
 .mini-field {
@@ -647,6 +708,7 @@ button:disabled {
 }
 
 .chart-panel {
+  position: relative;
   display: flex;
   min-height: 0;
   overflow: hidden;
@@ -711,6 +773,7 @@ button:disabled {
 }
 
 .action-section {
+  position: relative;
   padding: 7px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -765,6 +828,22 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.count-chip-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--strong-text);
+  white-space: nowrap;
+}
+
+/* The "Selected" chip is always the first (untoned) child of the Status section's chip-grid --
+   scoped to .action-section so this doesn't also match QcReportModal's differently-ordered
+   chip-grid, which has no untoned first chip of its own. */
+.action-section .chip-grid > .count-chip:first-child {
+  background: var(--color-selected-bg);
+  color: var(--color-selected-text);
+}
+
 .count-chip.preview {
   background: var(--accent-soft);
 }
@@ -792,6 +871,16 @@ button:disabled {
 .count-chip.imputed {
   background: var(--imputed-bg);
 }
+
+/* Text color for these six tones is light-mode-only: dark mode's --*-text variables are tuned
+   for other high-contrast-on-dark uses (mark pills, audit icons) and would look wrong on a
+   status chip there, so this is scoped to leave dark's existing muted-text chip color alone. */
+:root:not([data-theme='dark']) .count-chip.review { color: var(--review-text); }
+:root:not([data-theme='dark']) .count-chip.problem { color: var(--problem-text); }
+:root:not([data-theme='dark']) .count-chip.keep { color: var(--keep-text); }
+:root:not([data-theme='dark']) .count-chip.custom { color: var(--custom-text); }
+:root:not([data-theme='dark']) .count-chip.blanked { color: var(--blanked-text); }
+:root:not([data-theme='dark']) .count-chip.imputed { color: var(--imputed-text); }
 
 .button-group,
 .mark-grid {
@@ -1045,11 +1134,25 @@ td {
 .selectable-row:hover,
 .selectable-row:focus {
   outline: none;
-  background: var(--accent-soft);
+  background: var(--row-hover-bg);
 }
 
 .selected-row {
-  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  background: var(--selected-row-bg);
+}
+
+/* Cell-level selection: an inset ring rather than a background so it still reads correctly on
+   top of a mark color (review/problem/custom/etc.) already painted on the same <td>. Applied
+   per-cell regardless of whether the whole row also happens to be fully selected. */
+.selected-cell {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* The anchor cell (where a shift-click/shift-arrow extension originates) gets a visibly
+   thicker ring than a plain selected cell. Declared after .selected-cell so it wins the
+   box-shadow on a cell that carries both classes -- same specificity, source order decides. */
+.anchor-cell {
+  box-shadow: inset 0 0 0 3px var(--accent);
 }
 
 td:nth-child(7) {
@@ -1119,6 +1222,145 @@ td:nth-child(7) {
   border-color: var(--imputed-border);
   background: var(--imputed-bg);
   color: var(--imputed-text);
+}
+
+/*
+ * Table view (chart-type "Table"): a windowed, spreadsheet-style grid over the active sheet.
+ * Reuses .table-wrap/.selectable-row/.selected-row verbatim (same classes SelectionTable uses)
+ * and the same --review/--problem/--keep/--custom/--blanked/--imputed color tokens the mark
+ * pills use, applied as cell backgrounds instead of badges since this is a full data grid.
+ */
+.data-grid-panel {
+  padding: 0;
+}
+
+.data-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.data-grid-note {
+  margin: 0;
+}
+
+.data-grid-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.data-grid-table {
+  width: 100%;
+  table-layout: auto;
+}
+
+/* The two spacer <tr>s that stand in for the rows scrolled out of the current window. */
+.data-grid-spacer-cell {
+  padding: 0;
+  border: none;
+}
+
+/*
+ * The SelectionTable-oriented `th:nth-child(N)`/`td:nth-child(N)` width rules above are
+ * unscoped and match any table's Nth column -- including this one, whose column count varies
+ * per sheet. `.data-grid-scroll .data-grid-table th` carries two classes, out-specificing
+ * those single-class-equivalent (`th` + `:nth-child`) rules regardless of source order, so
+ * columns here size by content instead of inheriting SelectionTable's fixed percentages.
+ */
+.data-grid-scroll .data-grid-table th,
+.data-grid-scroll .data-grid-table td {
+  width: auto;
+}
+
+.data-grid-row-number {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  text-align: right;
+  background: var(--panel-subtle);
+}
+
+.data-grid-scroll .data-grid-table th.data-grid-row-number,
+.data-grid-scroll .data-grid-table td.data-grid-row-number {
+  width: 56px;
+}
+
+th.data-grid-row-number {
+  z-index: 3;
+}
+
+.data-grid-align-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-grid-align-left {
+  text-align: left;
+}
+
+/* Cell-level selection (Part 1): every data cell and column header is its own click target. */
+.data-grid-table th {
+  cursor: pointer;
+}
+
+.data-grid-table td:not(.data-grid-spacer-cell) {
+  cursor: pointer;
+}
+
+.data-grid-table td:not(.data-grid-spacer-cell):hover {
+  background: var(--accent-soft);
+}
+
+/* th is already bold (font-weight: 800) by default, so bold alone wouldn't distinguish the
+   active column -- underline plus the brighter --strong-text token (already used elsewhere for
+   emphasis) does, without introducing a new color. */
+.data-grid-active-column {
+  text-decoration: underline;
+  color: var(--strong-text);
+}
+
+.data-grid-mark-review {
+  background: var(--review-bg);
+  color: var(--review-text);
+}
+
+.data-grid-mark-problem {
+  background: var(--problem-bg);
+  color: var(--problem-text);
+}
+
+.data-grid-mark-keep {
+  background: var(--keep-bg);
+  color: var(--keep-text);
+}
+
+.data-grid-mark-custom {
+  background: var(--custom-bg);
+  color: var(--custom-text);
+}
+
+.data-grid-mark-blanked {
+  background: var(--blanked-bg);
+  color: var(--blanked-text);
+}
+
+.data-grid-mark-imputed {
+  background: var(--imputed-bg);
+  color: var(--imputed-text);
+}
+
+.data-grid-mark-preview {
+  background: var(--accent-soft);
+}
+
+.data-grid-drag-preview {
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
 }
 
 .status-pill.selected {
@@ -2234,7 +2476,7 @@ button {
 }
 
 .audit-search-bar input::placeholder {
-  color: var(--muted-text);
+  color: var(--caption-text);
 }
 
 .audit-search-clear {
@@ -2530,6 +2772,7 @@ button {
 .audit-icon-transform { background: var(--accent-soft); color: var(--accent); }
 
 .transform-history {
+  position: relative;
   gap: 8px;
 }
 
@@ -2725,6 +2968,15 @@ button {
 
 .qc-report-section {
   margin-top: 16px;
+}
+
+.qc-report-computing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--muted-text);
+  font-size: 13px;
 }
 
 .qc-report-section h3 {

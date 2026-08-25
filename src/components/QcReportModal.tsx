@@ -1,11 +1,11 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Icon } from './Icon'
 import { ModalPortal } from './ModalPortal'
 import { NORMALITY_TEST_LABELS, normalityVerdict } from './NormalityResult'
 import type { AuditAction, CellState, TransformAttempt, WorkbookData } from '../types/data'
 import { actionIconName } from '../utils/auditReason'
 import { buildQcReport } from '../utils/qcReport'
-import type { QcColumnStat } from '../utils/qcReport'
+import type { QcColumnStat, QcReport } from '../utils/qcReport'
 import { buildQcReportCsv, downloadCsv } from '../utils/exportCsv'
 import { formatNumber } from '../utils/stats'
 
@@ -45,18 +45,56 @@ export function QcReportModal({
   transformHistory: TransformAttempt[]
   onClose: () => void
 }) {
-  const report = useMemo(
-    () => buildQcReport(workbook, cellState, auditLog, transformHistory),
-    [workbook, cellState, auditLog, transformHistory],
-  )
-  const multiSheet = report.sheetSummaries.length > 1
+  const [report, setReport] = useState<QcReport | null>(null)
+  const [qcExportKind, setQcExportKind] = useState<'csv' | 'pdf' | null>(null)
+  const [qcExportError, setQcExportError] = useState('')
+
+  // Deferred by one tick (same pattern as the chart's isComputingChart gate) so the
+  // "Computing report..." state (report starts null, per useState above) can paint before
+  // this potentially-slow computation runs. The modal is freshly mounted each time it opens
+  // (see ActionToolbar's conditional render), so this effect's dep list changing mid-session
+  // is not a real-world case here -- there's no stale report to clear back to null first.
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setReport(buildQcReport(workbook, cellState, auditLog, transformHistory))
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [workbook, cellState, auditLog, transformHistory])
+
+  const multiSheet = (report?.sheetSummaries.length ?? 0) > 1
 
   function exportPdf() {
-    window.print()
+    if (qcExportKind || !report) {
+      return
+    }
+    setQcExportKind('pdf')
+    setQcExportError('')
+    window.setTimeout(() => {
+      try {
+        window.print()
+      } catch (caughtError) {
+        setQcExportError(caughtError instanceof Error ? caughtError.message : 'Export failed.')
+      } finally {
+        setQcExportKind(null)
+      }
+    }, 0)
   }
 
   function exportCsvReport() {
-    downloadCsv(`${fileStem(workbook.fileName)}-qc-report.csv`, buildQcReportCsv(report))
+    if (qcExportKind || !report) {
+      return
+    }
+    setQcExportKind('csv')
+    setQcExportError('')
+    window.setTimeout(() => {
+      try {
+        downloadCsv(`${fileStem(workbook.fileName)}-qc-report.csv`, buildQcReportCsv(report))
+      } catch (caughtError) {
+        setQcExportError(caughtError instanceof Error ? caughtError.message : 'Export failed.')
+      } finally {
+        setQcExportKind(null)
+      }
+    }, 0)
   }
 
   return (
@@ -71,11 +109,19 @@ export function QcReportModal({
           <div>
             <h2 id="qc-report-title">QC Report</h2>
             <p>
-              {workbook.fileName} &middot; generated {new Date(report.generatedAt).toLocaleString()}
+              {workbook.fileName}
+              {report ? <> &middot; generated {new Date(report.generatedAt).toLocaleString()}</> : null}
             </p>
           </div>
         </div>
 
+        {!report ? (
+          <div className="qc-report-computing">
+            <span className="spinner" aria-hidden="true" />
+            <span>Computing report…</span>
+          </div>
+        ) : (
+        <>
         <section className="qc-report-section">
           <div className="qc-summary-grid">
             <div className="qc-summary-cell">
@@ -213,16 +259,21 @@ export function QcReportModal({
           </table>
           </div>
         </section>
+        </>
+        )}
 
+        {qcExportError ? <p className="error-text">{qcExportError}</p> : null}
         <div className="modal-actions no-print">
           <button type="button" onClick={onClose}>
             <Icon name="x-circle" />Close
           </button>
-          <button type="button" onClick={exportCsvReport}>
-            <Icon name="clipboard" />Export CSV
+          <button type="button" onClick={exportCsvReport} disabled={qcExportKind !== null || !report}>
+            {qcExportKind === 'csv' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="clipboard" />}
+            Export CSV
           </button>
-          <button type="button" className="primary-action" onClick={exportPdf}>
-            <Icon name="download" />Export PDF
+          <button type="button" className="primary-action" onClick={exportPdf} disabled={qcExportKind !== null || !report}>
+            {qcExportKind === 'pdf' ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="download" />}
+            Export PDF
           </button>
         </div>
         <p className="hint no-print">

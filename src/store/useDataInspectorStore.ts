@@ -54,6 +54,11 @@ type DataInspectorState = {
   // previewCells is whatever a review tool (outlier/duplicate/threshold preview) last suggested.
   // Neither is persisted -- they're cleared on column/sheet change and never written to the audit log.
   selectedCells: Record<CellId, true>
+  // True while a large multi-point/multi-row selection (drag-select, shift-click range) is being
+  // committed -- set by the caller around a deferred addSelectedCells call so the "Selected" status
+  // chip can show a brief busy state instead of the UI silently hanging on large selections. Not
+  // used for single-cell click/toggle, which is cheap enough not to need it.
+  isSelecting: boolean
   previewCells: Record<CellId, PreviewCell>
   // The actual overlay of user edits, keyed by cell ID: marks, highlights, and value overrides.
   // This is the one mutable "cleaned" layer sitting on top of the immutable `workbook` rows.
@@ -69,18 +74,18 @@ type DataInspectorState = {
   // and the significance threshold used to render its pass/fail verdict.
   normalityTestType: NormalityTestType
   normalityThreshold: number
-  // Which segment is active in the Transform tab's Normalize control (None/Log/Z-score), and the
-  // log base to use when the mode is "Log" -- committed only when the user clicks Log to apply it.
-  normalizationMode: 'none' | 'log' | 'zscore'
-  logBase: number
+  // Action panel "Require reason for changes" toggle. Off by default; survives sheet switches
+  // (it's a session-wide preference, not per-sheet state) but is never persisted across reloads.
+  requireReason: boolean
   setWorkbook: (workbook: WorkbookData) => void
   setActiveSheetName: (sheetName: string) => void
-  setSelectedColumn: (columnName: string) => void
+  setSelectedColumn: (columnName: string, options?: { preserveSelection?: boolean }) => void
   setXAxis: (xAxis: string) => void
   setPlotType: (plotType: PlotType) => void
   toggleSelectedCell: (cellId: CellId) => void
   addSelectedCells: (cellIds: CellId[]) => void
   clearSelection: () => void
+  setIsSelecting: (isSelecting: boolean) => void
   setPreviewCells: (previewCells: PreviewCell[]) => void
   clearPreview: () => void
   markTargets: (mark: Exclude<CellMark, 'blanked'>, highlightColor?: string) => void
@@ -99,9 +104,8 @@ type DataInspectorState = {
   ) => { appliedCount: number; skippedCount: number }
   setNormalityTestType: (type: NormalityTestType) => void
   setNormalityThreshold: (threshold: number) => void
+  setRequireReason: (requireReason: boolean) => void
   checkColumnNormality: (columnNames: string[]) => NormalityTestResult | null
-  setNormalizationMode: (mode: 'none' | 'log' | 'zscore') => void
-  setLogBase: (base: number) => void
   undoLastActionGroup: () => void
 }
 
@@ -332,6 +336,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     xAxis: ROW_ORDER_AXIS,
     plotType: 'scatter',
     selectedCells: {},
+    isSelecting: false,
     previewCells: {},
     cellState: {},
     auditLog: [],
@@ -339,8 +344,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     transformHistory: [],
     normalityTestType: 'shapiro-wilk',
     normalityThreshold: 0.05,
-    normalizationMode: 'none',
-    logBase: 10,
+    requireReason: false,
 
     setWorkbook: (workbook) => {
       const firstSheet = workbook.sheets[0]
@@ -383,8 +387,14 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       })
     },
 
-    setSelectedColumn: (columnName) => {
-      set({ selectedColumn: columnName, selectedCells: {}, previewCells: {} })
+    setSelectedColumn: (columnName, options) => {
+      if (options?.preserveSelection) {
+        // Used only by TableView's ctrl/cmd-click, which needs to move the active column to
+        // whatever cell was just clicked without wiping cells already selected in other columns.
+        set({ selectedColumn: columnName })
+      } else {
+        set({ selectedColumn: columnName, selectedCells: {}, previewCells: {} })
+      }
     },
 
     setXAxis: (xAxis) => set({ xAxis }),
@@ -410,6 +420,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     },
 
     clearSelection: () => set({ selectedCells: {} }),
+
+    setIsSelecting: (isSelecting) => set({ isSelecting }),
 
     setPreviewCells: (previewCells) => {
       set({
@@ -739,6 +751,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       return { appliedCount, skippedCount }
     },
 
+    setRequireReason: (requireReason) => set({ requireReason }),
+
     setNormalityTestType: (type) => set({ normalityTestType: type }),
 
     setNormalityThreshold: (threshold) => {
@@ -762,15 +776,6 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         return null
       }
       return runNormalityTest(values, state.normalityTestType)
-    },
-
-    setNormalizationMode: (mode) => set({ normalizationMode: mode }),
-
-    setLogBase: (base) => {
-      if (!Number.isFinite(base) || base <= 1) {
-        return
-      }
-      set({ logBase: base })
     },
 
     undoLastActionGroup: () => {

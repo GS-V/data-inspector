@@ -100,14 +100,18 @@ function matchesSearch(action: AuditAction, query: string): boolean {
  * Reads only `auditLog` from the store -- it does not read or render `cellState`, `workbook`,
  * or any other slice, and it never calls a store action. Exporting and QC-report generation are
  * handled entirely by the parent via the `onExport`/`onGenerateReport` callbacks; this component
- * does not build files or mutate data itself.
+ * does not build files or mutate data itself. `isExporting` mirrors the parent's own export-busy
+ * state so this panel's "Export CSV" button (a second entry point to the same export the parent's
+ * own Export buttons trigger) shows the same disabled/spinner treatment.
  */
 export function AuditLogPanel({
   onExport,
   onGenerateReport,
+  isExporting,
 }: {
   onExport: () => void
   onGenerateReport: () => void
+  isExporting?: boolean
 }) {
   const auditLog = useDataInspectorStore((s) => s.auditLog)
   const [search, setSearch] = useState('')
@@ -263,10 +267,10 @@ export function AuditLogPanel({
           type="button"
           className="audit-export-btn"
           onClick={onExport}
-          disabled={auditLog.length === 0}
+          disabled={auditLog.length === 0 || isExporting}
           title="Export audit log as CSV"
         >
-          <Icon name="download" />
+          {isExporting ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="download" />}
           Export CSV
         </button>
         <button

@@ -46,7 +46,17 @@ const CHIP_ICONS: Partial<Record<string, IconName>> = {
   imputed: 'fill',
 }
 
-function CountChip({ label, value, tone }: { label: string; value: number; tone?: string }) {
+function CountChip({
+  label,
+  value,
+  tone,
+  busy,
+}: {
+  label: string
+  value: number
+  tone?: string
+  busy?: boolean
+}) {
   const iconName = tone ? CHIP_ICONS[tone] : undefined
 
   return (
@@ -55,7 +65,14 @@ function CountChip({ label, value, tone }: { label: string; value: number; tone?
         {iconName ? <Icon name={iconName} className="chip-icon" /> : null}
         {label}
       </span>
-      <strong>{value.toLocaleString()}</strong>
+      {busy ? (
+        <span className="count-chip-busy">
+          <span className="spinner button-spinner" aria-hidden="true" />
+          Selecting…
+        </span>
+      ) : (
+        <strong>{value.toLocaleString()}</strong>
+      )}
     </span>
   )
 }
@@ -79,11 +96,14 @@ export function ActionToolbar() {
     activeSheetName,
     selectedColumn,
     selectedCells,
+    isSelecting,
     previewCells,
     cellState,
     auditLog,
     undoStack,
     transformHistory,
+    requireReason,
+    setRequireReason,
     replaceSelectedTargets,
     blankSelectedTargets,
     blankMarkedInCurrentColumn,
@@ -103,8 +123,11 @@ export function ActionToolbar() {
     value: 'data-inspector',
   })
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle')
+  const [exportKind, setExportKind] = useState<'data' | 'audit' | null>(null)
   const [exportError, setExportError] = useState('')
   const [activeTab, setActiveTab] = useState<'actions' | 'audit'>('actions')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [undoBusy, setUndoBusy] = useState(false)
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
@@ -275,8 +298,66 @@ export function ActionToolbar() {
     return 'Matching values in the active sheet and selected column will be blanked in the cleaned export. Rows are not deleted.'
   }
 
+  // Shared by the reason-modal confirm path and the "Require reason" OFF immediate-apply path --
+  // reason is omitted entirely (rather than passed as empty strings) for the immediate path, so
+  // the audit log records these fields as blank exactly like any other reason-less store call.
+  function applyCleaningAction(action: PendingCleaningAction, reason?: AuditReasonInput) {
+    if (action.kind === 'replace') {
+      replaceSelectedTargets(action.value, reason)
+      setReplacementMessage(
+        `Replacement applied to ${action.count.toLocaleString()} selected value${action.count === 1 ? '' : 's'}.`,
+      )
+    } else if (action.kind === 'blankSelected') {
+      blankSelectedTargets(reason)
+      setReplacementMessage(
+        `${action.count.toLocaleString()} selected or previewed value${action.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else if (action.kind === 'blankProblem') {
+      blankMarkedInCurrentColumn('problem', reason)
+      setReplacementMessage(
+        `${action.count.toLocaleString()} problem value${action.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else if (action.kind === 'blankReview') {
+      blankMarkedInCurrentColumn('review', reason)
+      setReplacementMessage(
+        `${action.count.toLocaleString()} review value${action.count === 1 ? '' : 's'} replaced with blank.`,
+      )
+    } else {
+      const { appliedCount, skippedCount } = imputeMissingValues(action.method, reason)
+      const skipNote =
+        action.method === 'interpolate' && skippedCount > 0
+          ? ` (${skippedCount.toLocaleString()} not filled: no neighbor)`
+          : ''
+      setReplacementMessage(`${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'} filled.${skipNote}`)
+    }
+  }
+
+  // Entry point for the four blank/replace buttons: applies immediately (no prompt, reason left
+  // blank) when "Require reason" is off, otherwise opens the reason modal as before. Fill-missing
+  // (impute) actions always go straight to openReasonPrompt and are unaffected by the toggle.
+  function runCleaningAction(action: PendingCleaningAction) {
+    if (!requireReason) {
+      if (actionBusy) {
+        return
+      }
+      setActionBusy(true)
+      window.setTimeout(() => {
+        try {
+          applyCleaningAction(action)
+        } catch (caughtError) {
+          setReplacementMessage(caughtError instanceof Error ? caughtError.message : 'Action failed. Please try again.')
+        } finally {
+          setActionBusy(false)
+        }
+      }, 0)
+      return
+    }
+
+    openReasonPrompt(action)
+  }
+
   function confirmReasonPrompt() {
-    if (!pendingAction) {
+    if (!pendingAction || actionBusy) {
       return
     }
 
@@ -286,41 +367,22 @@ export function ActionToolbar() {
     }
 
     const reason = actionReason()
-    if (pendingAction.kind === 'replace') {
-      replaceSelectedTargets(pendingAction.value, reason)
-      setReplacementMessage(
-        `Replacement applied to ${pendingAction.count.toLocaleString()} selected value${pendingAction.count === 1 ? '' : 's'}.`,
-      )
-    } else if (pendingAction.kind === 'blankSelected') {
-      blankSelectedTargets(reason)
-      setReplacementMessage(
-        `${pendingAction.count.toLocaleString()} selected or previewed value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
-      )
-    } else if (pendingAction.kind === 'blankProblem') {
-      blankMarkedInCurrentColumn('problem', reason)
-      setReplacementMessage(
-        `${pendingAction.count.toLocaleString()} problem value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
-      )
-    } else if (pendingAction.kind === 'blankReview') {
-      blankMarkedInCurrentColumn('review', reason)
-      setReplacementMessage(
-        `${pendingAction.count.toLocaleString()} review value${pendingAction.count === 1 ? '' : 's'} replaced with blank.`,
-      )
-    } else {
-      const { appliedCount, skippedCount } = imputeMissingValues(pendingAction.method, reason)
-      const skipNote =
-        pendingAction.method === 'interpolate' && skippedCount > 0
-          ? ` (${skippedCount.toLocaleString()} not filled: no neighbor)`
-          : ''
-      setReplacementMessage(
-        `${appliedCount.toLocaleString()} value${appliedCount === 1 ? '' : 's'} filled.${skipNote}`,
-      )
-    }
+    const action = pendingAction
 
-    setPendingAction(null)
-    setReasonCategory('')
-    setReasonNote('')
-    setReasonError('')
+    setActionBusy(true)
+    window.setTimeout(() => {
+      try {
+        applyCleaningAction(action, reason)
+        setPendingAction(null)
+        setReasonCategory('')
+        setReasonNote('')
+        setReasonError('')
+      } catch (caughtError) {
+        setReasonError(caughtError instanceof Error ? caughtError.message : 'Action failed. Please try again.')
+      } finally {
+        setActionBusy(false)
+      }
+    }, 0)
   }
 
   function handleReplaceSelected() {
@@ -335,7 +397,21 @@ export function ActionToolbar() {
       return
     }
 
-    openReasonPrompt({ kind: 'replace', value: parsedValue, count: selectedCount })
+    runCleaningAction({ kind: 'replace', value: parsedValue, count: selectedCount })
+  }
+
+  function handleUndo() {
+    if (undoBusy || undoStack.length === 0) {
+      return
+    }
+    setUndoBusy(true)
+    window.setTimeout(() => {
+      try {
+        undoLastActionGroup()
+      } finally {
+        setUndoBusy(false)
+      }
+    }, 0)
   }
 
   function safeExportName(): string {
@@ -363,6 +439,7 @@ export function ActionToolbar() {
   function handleDataExport() {
     setExportStatus('preparing')
     setExportError('')
+    setExportKind('data')
 
     window.setTimeout(async () => {
       try {
@@ -389,6 +466,7 @@ export function ActionToolbar() {
   function handleAuditExport() {
     setExportStatus('preparing')
     setExportError('')
+    setExportKind('audit')
 
     window.setTimeout(() => {
       try {
@@ -404,6 +482,9 @@ export function ActionToolbar() {
   const isExportDisabled =
     (exportType === 'csv' && !sheet) ||
     (exportType === 'xlsx' && !workbook)
+  const isExportBusy = exportStatus === 'preparing' || exportStatus === 'applying' || exportStatus === 'creating'
+  const isDataExportBusy = isExportBusy && exportKind === 'data'
+  const isAuditExportBusy = isExportBusy && exportKind === 'audit'
   const statusText =
     exportStatus === 'preparing'
       ? 'Preparing export...'
@@ -441,7 +522,11 @@ export function ActionToolbar() {
       </div>
 
       {activeTab === 'audit' ? (
-        <AuditLogPanel onExport={handleAuditExport} onGenerateReport={() => setShowQcReport(true)} />
+        <AuditLogPanel
+          onExport={handleAuditExport}
+          onGenerateReport={() => setShowQcReport(true)}
+          isExporting={isAuditExportBusy}
+        />
       ) : (
       <div className="action-tab-content">
       <div className="panel-title">Actions</div>
@@ -449,7 +534,7 @@ export function ActionToolbar() {
       <section className="action-section">
         <SectionHeader title="Status" />
         <div className="chip-grid">
-          <CountChip label="Selected" value={Object.keys(selectedCells).length} />
+          <CountChip label="Selected" value={Object.keys(selectedCells).length} busy={isSelecting} />
           <CountChip label="Preview" value={Object.keys(previewCells).length} tone="preview" />
           <CountChip label="Review" value={sheetCounts.review} tone="review" />
           <CountChip label="Problem" value={sheetCounts.problem} tone="problem" />
@@ -466,8 +551,18 @@ export function ActionToolbar() {
           help="Replacements and blanking affect cleaned exports only. Raw data stays unchanged and rows are never deleted."
         />
         <div className="button-group">
+          <label className="transform-checkbox-row">
+            <input
+              type="checkbox"
+              checked={requireReason}
+              onChange={(event) => setRequireReason(event.target.checked)}
+            />
+            Require reason for changes
+          </label>
           <p className="audit-cue">
-            Cleaning actions require a reason. The reason is saved only in the Audit Log CSV.
+            {requireReason
+              ? 'Cleaning actions require a reason. The reason is saved only in the Audit Log CSV.'
+              : 'Cleaning actions apply immediately. The audit log entry is saved with no reason.'}
           </p>
           <label className="field replacement-field">
             <span>New value</span>
@@ -484,7 +579,7 @@ export function ActionToolbar() {
           <button
             type="button"
             onClick={handleReplaceSelected}
-            disabled={selectedCount === 0 || replacementValue.trim() === ''}
+            disabled={selectedCount === 0 || replacementValue.trim() === '' || actionBusy}
             title="Replaces selected values in cleaned exports. Raw data is not changed."
           >
             <Icon name="swap" />
@@ -494,8 +589,8 @@ export function ActionToolbar() {
           <button
             type="button"
             className="danger-soft"
-            onClick={() => openReasonPrompt({ kind: 'blankSelected', count: targetCount })}
-            disabled={targetCount === 0}
+            onClick={() => runCleaningAction({ kind: 'blankSelected', count: targetCount })}
+            disabled={targetCount === 0 || actionBusy}
             title="Selected or previewed values become blank in the cleaned export. Rows are not deleted."
           >
             <Icon name="eraser" />
@@ -504,9 +599,9 @@ export function ActionToolbar() {
           <button
             type="button"
             onClick={() =>
-              openReasonPrompt({ kind: 'blankProblem', count: selectedColumnCounts.problem })
+              runCleaningAction({ kind: 'blankProblem', count: selectedColumnCounts.problem })
             }
-            disabled={selectedColumnCounts.problem === 0}
+            disabled={selectedColumnCounts.problem === 0 || actionBusy}
             title="Replaces all red Problem cells in the current sheet and selected column with blank in the cleaned export."
           >
             <Icon name="alert" className="problem-icon" />
@@ -515,9 +610,9 @@ export function ActionToolbar() {
           <button
             type="button"
             onClick={() =>
-              openReasonPrompt({ kind: 'blankReview', count: selectedColumnCounts.review })
+              runCleaningAction({ kind: 'blankReview', count: selectedColumnCounts.review })
             }
-            disabled={selectedColumnCounts.review === 0}
+            disabled={selectedColumnCounts.review === 0 || actionBusy}
             title="Replaces all yellow Review cells in the current sheet and selected column with blank in the cleaned export."
           >
             <Icon name="flag" className="review-icon" />
@@ -525,11 +620,11 @@ export function ActionToolbar() {
           </button>
           <button
             type="button"
-            onClick={undoLastActionGroup}
-            disabled={undoStack.length === 0}
+            onClick={handleUndo}
+            disabled={undoStack.length === 0 || undoBusy}
             title="Reverses the most recent grouped mark, replace, remove highlight, or blank action."
           >
-            <Icon name="undo" />
+            {undoBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="undo" />}
             Undo last action
           </button>
         </div>
@@ -562,6 +657,12 @@ export function ActionToolbar() {
             </button>
           ))}
         </div>
+        {actionBusy && pendingAction?.kind === 'impute' ? (
+          <div className="panel-loading-overlay" role="status" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            <span>Filling values…</span>
+          </div>
+        ) : null}
       </section>
 
       <section className="action-section export-section">
@@ -589,19 +690,19 @@ export function ActionToolbar() {
             type="button"
             className="primary-action export-data-btn"
             onClick={handleDataExport}
-            disabled={isExportDisabled}
+            disabled={isExportDisabled || isExportBusy}
           >
-            <Icon name="download" />
+            {isDataExportBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="download" />}
             Export data
           </button>
           <button
             type="button"
             className="export-audit-btn"
             onClick={handleAuditExport}
-            disabled={auditLog.length === 0}
+            disabled={auditLog.length === 0 || isExportBusy}
             title="Exports highlights, blanks, removals, and undo actions as a separate audit file."
           >
-            <Icon name="clipboard" />
+            {isAuditExportBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="clipboard" />}
             Export audit log
           </button>
           {statusText ? (
@@ -664,15 +765,16 @@ export function ActionToolbar() {
             </label>
             {reasonError ? <p className="error-text">{reasonError}</p> : null}
             <div className="modal-actions">
-              <button type="button" onClick={closeReasonPrompt}>
+              <button type="button" onClick={closeReasonPrompt} disabled={actionBusy}>
                 Cancel
               </button>
               <button
                 type="button"
                 className="primary-action"
                 onClick={confirmReasonPrompt}
-                disabled={!hasCompleteAuditReason(reasonCategory, reasonNote)}
+                disabled={!hasCompleteAuditReason(reasonCategory, reasonNote) || actionBusy}
               >
+                {actionBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : null}
                 Apply change
               </button>
             </div>

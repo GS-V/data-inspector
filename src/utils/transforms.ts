@@ -34,9 +34,9 @@ function applyLog10(value: number, useOffset?: boolean, base?: number): number |
   return Math.log(input) / Math.log(base)
 }
 
-/** Square root: y = √x. Guards x <= 0, matching the other transforms' skip-non-positive-input convention. */
+/** Square root: y = √x, requires x >= 0. Unlike the log-family transforms, x = 0 is in-domain (√0 = 0), so only negative input is skipped. */
 function applySqrt(value: number): number | null {
-  if (value <= 0) {
+  if (value < 0) {
     return null
   }
   return Math.sqrt(value)

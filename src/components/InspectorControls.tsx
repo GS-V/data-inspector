@@ -38,32 +38,38 @@ export function InspectorControls() {
         </select>
       </label>
 
-      <label className="field">
-        <span>Y-axis</span>
-        <select
-          value={selectedColumn}
-          onChange={(event) => setSelectedColumn(event.target.value)}
-          disabled={numericColumns.length === 0}
-        >
-          {numericColumns.map((column) => (
-            <option key={column} value={column}>
-              {column}
-            </option>
-          ))}
-        </select>
-      </label>
+      {plotType === 'table' ? (
+        <p className="hint">All columns shown. Y-axis and X-axis don&apos;t apply to Table view.</p>
+      ) : (
+        <>
+          <label className="field">
+            <span>Y-axis</span>
+            <select
+              value={selectedColumn}
+              onChange={(event) => setSelectedColumn(event.target.value)}
+              disabled={numericColumns.length === 0}
+            >
+              {numericColumns.map((column) => (
+                <option key={column} value={column}>
+                  {column}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <label className="field">
-        <span>X-axis</span>
-        <select value={xAxis} onChange={(event) => setXAxis(event.target.value)} disabled={!sheet}>
-          <option value={ROW_ORDER_AXIS}>Row order</option>
-          {numericColumns.map((column) => (
-            <option key={column} value={column}>
-              {column}
-            </option>
-          ))}
-        </select>
-      </label>
+          <label className="field">
+            <span>X-axis</span>
+            <select value={xAxis} onChange={(event) => setXAxis(event.target.value)} disabled={!sheet}>
+              <option value={ROW_ORDER_AXIS}>Row order</option>
+              {numericColumns.map((column) => (
+                <option key={column} value={column}>
+                  {column}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
 
       <label className="field">
         <span>Plot type</span>

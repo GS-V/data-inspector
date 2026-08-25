@@ -1,38 +1,79 @@
 :root {
   color-scheme: light;
-  --bg: #e8eef6;
-  --bg-accent: #dbeafe;
-  --panel-bg: #ffffff;
-  --panel-subtle: #f6f9fd;
-  --control-bg: #ffffff;
-  --strong-text: #111827;
-  --body-text: #374151;
-  --muted-text: #6b7280;
-  --border: #dce5f0;
-  --border-strong: #cbd5e1;
-  --accent: #2563eb;
-  --accent-soft: #eff6ff;
-  --accent-border: #bfdbfe;
-  --accent-text: #1d4ed8;
+
+  /* Periwinkle palette. Every variable below this comment is the literal palette from spec;
+     every variable above (the pre-existing names App.css already consumes) aliases into it, so
+     the whole app picks up Periwinkle without touching component files. Chip variable names keep
+     their existing --color-{status}-bg/text form (no "chip-" infix) rather than the names used
+     keep their prior (Indigo Mist) values unchanged. */
+  --color-app-bg: #f8f9ff;
+  --color-sidebar-bg: #dde4f4;
+  --color-action-bg: #d8dff0;
+  --color-card-bg: #ffffff;
+  --color-chart-bg: #f8f9ff;
+  --color-input-bg: #ffffff;
+  --color-border: #b8c4e4;
+  --color-border-light: #c8d0ec;
+  --color-text-primary: #141830;
+  --color-text-secondary: #303870;
+  --color-text-muted: #5860a0;
+  --color-accent: #3040c8;
+  --color-accent-hover: #2030b0;
+  --color-accent-soft: rgba(48, 64, 200, 0.10);
+  --color-selected-bg: #dce4fc;
+  --color-selected-text: #2030b0;
+  --color-review-bg: #fef3cc;
+  --color-review-text: #6a5000;
+  --color-problem-bg: #fde0de;
+  --color-problem-text: #7a2020;
+  --color-accepted-bg: #d4f0e4;
+  --color-accepted-text: #145230;
+  --color-blanked-bg: #ececf4;
+  --color-blanked-text: #404080;
+  --color-imputed-bg: #e0e8ff;
+  --color-imputed-text: #3730a3;
+  --color-custom-bg: #fce7f3;
+  --color-custom-text: #9d174d;
+
+  --bg: var(--color-app-bg);
+  --bg-accent: #c7d9f5;
+  --panel-bg: var(--color-chart-bg);
+  --panel-subtle: var(--color-card-bg);
+  --sidebar-bg: var(--color-sidebar-bg);
+  --control-bg: var(--color-input-bg);
+  --button-bg: var(--color-card-bg);
+  --button-text: var(--color-text-secondary);
+  --row-hover-bg: rgba(45, 91, 181, 0.08);
+  --selected-row-bg: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+  --strong-text: var(--color-text-primary);
+  --body-text: var(--color-text-secondary);
+  --muted-text: var(--color-text-muted);
+  --caption-text: var(--color-text-muted);
+  --border: var(--color-border);
+  --border-strong: var(--color-border);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --accent-border: var(--color-border);
+  --accent-text: var(--color-accent-hover);
   --shadow: 0 14px 32px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
-  --review-bg: #fef9c3;
-  --review-border: #facc15;
-  --review-text: #713f12;
-  --problem-bg: #ffe4e6;
-  --problem-border: #fb7185;
-  --problem-text: #9f1239;
-  --keep-bg: #dcfce7;
-  --keep-border: #22c55e;
-  --keep-text: #14532d;
-  --custom-bg: #f3e8ff;
-  --custom-border: #a855f7;
-  --custom-text: #581c87;
-  --blanked-bg: #f1f5f9;
-  --blanked-border: #cbd5e1;
-  --blanked-text: #475569;
-  --imputed-bg: #bae6fd;
-  --imputed-border: #38bdf8;
-  --imputed-text: #0c4a6e;
+  --review-bg: var(--color-review-bg);
+  --review-border: #fde68a;
+  --review-text: var(--color-review-text);
+  --problem-bg: var(--color-problem-bg);
+  --problem-border: #fecaca;
+  --problem-text: var(--color-problem-text);
+  --keep-bg: var(--color-accepted-bg);
+  --keep-border: #bbf7d0;
+  --keep-text: var(--color-accepted-text);
+  --custom-bg: var(--color-custom-bg);
+  --custom-border: #fbcfe8;
+  --custom-text: var(--color-custom-text);
+  --blanked-bg: var(--color-blanked-bg);
+  --blanked-border: #b8cce8;
+  --blanked-text: var(--color-blanked-text);
+  --imputed-bg: var(--color-imputed-bg);
+  --imputed-border: #c7d2fe;
+  --imputed-text: var(--color-imputed-text);
   --danger-soft: #fff1f2;
   --danger-text: #9f1239;
   font-family:
@@ -47,14 +88,27 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+  /* These four are consumed directly (not just aliased) by the light-mode-added .action-panel,
+     input border-color, and "Selected" chip rules in App.css -- values reproduce exactly what
+     those elements already rendered in dark mode before Indigo Mist existed, so dark is unchanged. */
+  --color-action-bg: rgba(10, 22, 36, 0.94);
+  --color-border: rgba(148, 163, 184, 0.32);
+  --color-selected-bg: rgba(16, 33, 52, 0.82);
+  --color-selected-text: #94a3b8;
   --bg: #050b14;
   --bg-accent: #0b2a56;
   --panel-bg: rgba(10, 22, 36, 0.94);
   --panel-subtle: rgba(16, 33, 52, 0.82);
+  --sidebar-bg: rgba(10, 22, 36, 0.94);
   --control-bg: #0a1727;
+  --button-bg: #0a1727;
+  --button-text: #f8fafc;
+  --row-hover-bg: rgba(37, 99, 235, 0.18);
+  --selected-row-bg: color-mix(in srgb, var(--accent-soft) 72%, transparent);
   --strong-text: #f8fafc;
   --body-text: #d1d5db;
   --muted-text: #94a3b8;
+  --caption-text: #64748b;
   --border: rgba(125, 158, 196, 0.18);
   --border-strong: rgba(148, 163, 184, 0.32);
   --accent: #2384ff;
