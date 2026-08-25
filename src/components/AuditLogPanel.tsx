@@ -93,6 +93,15 @@ function matchesSearch(action: AuditAction, query: string): boolean {
   )
 }
 
+/**
+ * Read-only view of the session's change history: session totals, a search box, and one
+ * expandable group per (sheet, column) showing every action recorded against it.
+ *
+ * Reads only `auditLog` from the store -- it does not read or render `cellState`, `workbook`,
+ * or any other slice, and it never calls a store action. Exporting and QC-report generation are
+ * handled entirely by the parent via the `onExport`/`onGenerateReport` callbacks; this component
+ * does not build files or mutate data itself.
+ */
 export function AuditLogPanel({
   onExport,
   onGenerateReport,

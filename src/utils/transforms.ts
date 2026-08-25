@@ -9,6 +9,7 @@ export type TransformParams = {
   base?: number
 }
 
+/** Natural log: y = ln(x). Requires x > 0; out-of-domain input returns null (skip) rather than NaN. */
 function applyLog(value: number, useOffset?: boolean): number | null {
   const input = useOffset ? value + 1 : value
   if (input <= 0) {
@@ -17,7 +18,11 @@ function applyLog(value: number, useOffset?: boolean): number | null {
   return Math.log(input)
 }
 
-/** Generalized log transform: base 10 uses Math.log10 directly; any other base (> 1) uses the change-of-base identity. */
+/**
+ * Log at a chosen base: y = ln(x) / ln(base), i.e. base 10 unless a different base is given.
+ * Base 10 uses Math.log10 directly; any other base (> 1) uses the change-of-base identity.
+ * Requires x > 0, same as natural log.
+ */
 function applyLog10(value: number, useOffset?: boolean, base?: number): number | null {
   const input = useOffset ? value + 1 : value
   if (input <= 0) {
@@ -29,6 +34,7 @@ function applyLog10(value: number, useOffset?: boolean, base?: number): number |
   return Math.log(input) / Math.log(base)
 }
 
+/** Square root: y = √x. Guards x <= 0, matching the other transforms' skip-non-positive-input convention. */
 function applySqrt(value: number): number | null {
   if (value <= 0) {
     return null
@@ -36,6 +42,7 @@ function applySqrt(value: number): number | null {
   return Math.sqrt(value)
 }
 
+/** Box-Cox: y = (x^λ − 1) / λ for λ ≠ 0, or y = ln(x) when λ = 0. Requires x > 0. */
 function applyBoxCox(value: number, lambda: number): number | null {
   if (value <= 0) {
     return null
@@ -43,6 +50,7 @@ function applyBoxCox(value: number, lambda: number): number | null {
   return lambda === 0 ? Math.log(value) : (value ** lambda - 1) / lambda
 }
 
+/** Z-score: y = (x − mean) / SD. Undefined without both mean and SD, or when SD is 0 (constant column). */
 function applyZScore(value: number, mean?: number, sd?: number): number | null {
   if (mean === undefined || sd === undefined || sd === 0) {
     return null

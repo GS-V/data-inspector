@@ -386,18 +386,12 @@ button {
   cursor: pointer;
 }
 
-.button-icon,
 .chip-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
   line-height: 1;
-}
-
-.button-icon {
-  width: 16px;
-  color: currentColor;
 }
 
 .chip-icon {
@@ -1186,10 +1180,6 @@ button {
   padding: 0 8px;
 }
 
-.button-icon {
-  width: 14px;
-}
-
 .info-tip {
   width: 16px;
   height: 16px;
@@ -1466,7 +1456,6 @@ button {
   white-space: normal;
 }
 
-.button-icon,
 .chip-icon {
   width: 13px;
 }
@@ -1734,11 +1723,6 @@ button {
   gap: 4px;
   font-size: 11.5px;
   line-height: 1.12;
-}
-
-.button-icon {
-  width: 12px;
-  font-size: 12px;
 }
 
 .file-picker {

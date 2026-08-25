@@ -42,19 +42,35 @@ export type AuditReasonInput = {
 }
 
 type DataInspectorState = {
+  // The parsed file itself -- immutable raw rows/columns. Set once by setWorkbook() on file load;
+  // every downstream action reads it but never edits it directly (edits live in cellState instead).
   workbook?: WorkbookData
+  // Which sheet, value column, X-axis column, and chart type the chart panel currently renders.
   activeSheetName: string
   selectedColumn: string
   xAxis: string
   plotType: PlotType
+  // Transient, UI-only cell targeting: selectedCells is the user's manual click/drag selection,
+  // previewCells is whatever a review tool (outlier/duplicate/threshold preview) last suggested.
+  // Neither is persisted -- they're cleared on column/sheet change and never written to the audit log.
   selectedCells: Record<CellId, true>
   previewCells: Record<CellId, PreviewCell>
+  // The actual overlay of user edits, keyed by cell ID: marks, highlights, and value overrides.
+  // This is the one mutable "cleaned" layer sitting on top of the immutable `workbook` rows.
   cellState: Record<CellId, CellState>
+  // Full append-only history of every action taken (owned by applyCellChanges), plus the stack of
+  // action-groups undoLastActionGroup() pops from, one group per user-facing action.
   auditLog: AuditAction[]
   undoStack: AuditAction[][]
+  // One entry per applied column transform (log/sqrt/box-cox/z-score), feeding the Transform tab's
+  // history panel, its before/after stats, and its Python/R "copy as code" snippets.
   transformHistory: TransformAttempt[]
+  // User-selected settings for the Transform tab's "Check normality" button -- which test to run
+  // and the significance threshold used to render its pass/fail verdict.
   normalityTestType: NormalityTestType
   normalityThreshold: number
+  // Which segment is active in the Transform tab's Normalize control (None/Log/Z-score), and the
+  // log base to use when the mode is "Log" -- committed only when the user clicks Log to apply it.
   normalizationMode: 'none' | 'log' | 'zscore'
   logBase: number
   setWorkbook: (workbook: WorkbookData) => void

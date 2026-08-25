@@ -45,6 +45,12 @@ export function getDisplayValue(value: RawCellValue): string {
   return String(value)
 }
 
+/**
+ * A column counts as numeric if at least `minimumNumericRatio` (default 60%) of its
+ * non-empty values parse as numbers — a threshold rather than "all values," so a handful
+ * of stray text entries (typos, "N/A") don't disqualify an otherwise numeric column.
+ * A column with zero non-empty values is treated as not numeric rather than dividing by zero.
+ */
 export function findNumericColumns(
   rows: RowData[],
   columns: string[],

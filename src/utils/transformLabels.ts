@@ -34,7 +34,13 @@ export const TRANSFORM_INFO: Record<TransformationType, { label: string; effect:
   },
 }
 
-/** Display label for an applied transform, reflecting the actual log base used instead of the static default. */
+/**
+ * Single source of truth for how a transform is named once applied. Every place that shows a
+ * transform's name after the fact -- the "applied" toast message, the transform-history entry
+ * title, audit log entries, and the Python/R code-gen panel -- calls this instead of reading
+ * TRANSFORM_INFO[type].label directly, so a log transform's display name always reflects the
+ * base actually used (e.g. "Log2") rather than the static "Log (base 10)" default.
+ */
 export function transformDisplayLabel(type: TransformationType, base?: number): string {
   if (type === 'log10') {
     return `Log${base ?? 10}`

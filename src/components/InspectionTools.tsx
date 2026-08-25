@@ -756,6 +756,13 @@ export function InspectionTools() {
                 </div>
               )
             })()}
+            {/*
+              Normalize card: replaces the former standalone "Log (base 10)" and "Z-Score" xform
+              cards with one None/Log/Z-score control. Log now supports a user-chosen base (not
+              just 10); each mode button both selects and immediately applies that transform, same
+              as the cards it replaced -- "None" is the exception, since there's no data mutation
+              for it to apply, so clicking it only updates which segment is shown as active.
+            */}
             <div className="xform-card xform-card-normalize" aria-label="Normalize">
               <span className="icon-wrap">
                 <Icon name="compress" />
