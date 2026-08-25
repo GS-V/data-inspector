@@ -332,9 +332,9 @@ export function ActionToolbar() {
     }
   }
 
-  // Entry point for the four blank/replace buttons: applies immediately (no prompt, reason left
-  // blank) when "Require reason" is off, otherwise opens the reason modal as before. Fill-missing
-  // (impute) actions always go straight to openReasonPrompt and are unaffected by the toggle.
+  // Entry point for every data-modifying cleaning action (replace, blank, and fill/impute):
+  // applies immediately (no prompt, reason left blank) when "Require reason" is off, otherwise
+  // opens the reason modal.
   function runCleaningAction(action: PendingCleaningAction) {
     if (!requireReason) {
       if (actionBusy) {
@@ -644,8 +644,8 @@ export function ActionToolbar() {
             <button
               key={option.value}
               type="button"
-              onClick={() => openReasonPrompt({ kind: 'impute', method: option.value, count: imputeTargetCount })}
-              disabled={imputeTargetCount === 0 || !hasNonMissingValues}
+              onClick={() => runCleaningAction({ kind: 'impute', method: option.value, count: imputeTargetCount })}
+              disabled={imputeTargetCount === 0 || !hasNonMissingValues || actionBusy}
               title={
                 option.value === 'interpolate'
                   ? 'Interpolates each missing value from the nearest non-missing values above and below it in row order. Cells at a column edge with no neighbor on one side are skipped.'

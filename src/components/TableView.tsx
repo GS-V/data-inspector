@@ -86,6 +86,13 @@ export function TableView({ sheet }: TableViewProps) {
   // store call a plain side effect in the event handler body, not inside any updater callback.
   const dragStateRef = useRef<{ anchor: CellPosition; current: CellPosition } | null>(null)
 
+  // Whether the pointer has moved to a different cell since mousedown, read synchronously inside
+  // the finishDrag closure below. Can't rely on the `isDragging` state variable there -- finishDrag
+  // is created once, at mousedown, and closes over whatever `isDragging` was at that render; state
+  // updates from mouseenter after that point never change what that closure sees. A ref reads the
+  // current value regardless of when the closure was created.
+  const hasMovedRef = useRef(false)
+
   // Deferred by one tick so a brief spinner can paint before the (potentially large) initial
   // windowed render runs -- same key-comparison technique as the chart's isComputingChart gate,
   // used instead of a plain boolean so resetting it on sheet change never calls setState
@@ -122,6 +129,7 @@ export function TableView({ sheet }: TableViewProps) {
       setIsDragging(false)
       setDragPreview(null)
       dragStateRef.current = null
+      hasMovedRef.current = false
     }, 0)
     return () => window.clearTimeout(timeout)
   }, [sheet.name])
@@ -307,12 +315,14 @@ export function TableView({ sheet }: TableViewProps) {
     clearPreview()
     clearSelection()
 
+    // Drag doesn't visually activate (no crosshair cursor, no rectangle preview, no suppressed
+    // text selection) until the pointer actually reaches a different cell -- see
+    // handleCellMouseEnter below. A plain click that never moves stays a single-cell selection.
     const start = { rowIndex, column }
     setAnchorCell(start)
     setActiveCell(start)
-    setIsDragging(true)
+    hasMovedRef.current = false
     dragStateRef.current = { anchor: start, current: start }
-    setDragPreview(dragStateRef.current)
 
     function finishDrag() {
       window.removeEventListener('mouseup', finishDrag)
@@ -320,32 +330,51 @@ export function TableView({ sheet }: TableViewProps) {
       setDragPreview(null)
 
       const dragState = dragStateRef.current
+      const moved = hasMovedRef.current
       dragStateRef.current = null
+      hasMovedRef.current = false
       if (!dragState) {
         return
       }
       // Selection was already cleared at mousedown above, so the final rectangle is added, not
-      // replaced again (replacing here would drop everything but the last cell dragged over).
-      const cellIds = rectangleCellIds(
-        dragState.anchor.rowIndex,
-        dragState.current.rowIndex,
-        dragState.anchor.column,
-        dragState.current.column,
-      )
+      // replaced again (replacing here would drop everything but the last cell dragged over). If
+      // the pointer never moved off the origin cell, this rectangle is just that one cell.
+      const cellIds = moved
+        ? rectangleCellIds(
+            dragState.anchor.rowIndex,
+            dragState.current.rowIndex,
+            dragState.anchor.column,
+            dragState.current.column,
+          )
+        : [makeCellId(sheet.name, dragState.anchor.rowIndex, dragState.anchor.column)]
       commitCellIds(cellIds, { additive: true })
       setActiveCell(dragState.current)
     }
 
+    // Attached to window (not just the table) so releasing the mouse button outside the table --
+    // the pointer having left the grid entirely before the button comes up -- still commits the
+    // drag and clears isDragging, instead of leaving the drag stuck open.
     window.addEventListener('mouseup', finishDrag)
   }
 
   // Cell-level (not row-level) so the live rectangle preview tracks both the row AND column the
   // cursor is currently over -- updates on mouseenter rather than mousemove for performance.
+  // Attached directly to each <td> (see the table body below) rather than a parent wrapper, so it
+  // fires on every cell the pointer sweeps into during a drag, not just once for the whole table.
   function handleCellMouseEnter(rowIndex: number, column: string) {
-    if (isDragging && dragStateRef.current) {
-      dragStateRef.current = { anchor: dragStateRef.current.anchor, current: { rowIndex, column } }
-      setDragPreview(dragStateRef.current)
+    const dragState = dragStateRef.current
+    if (!dragState) {
+      return
     }
+    dragState.current = { rowIndex, column }
+    if (!hasMovedRef.current) {
+      if (rowIndex === dragState.anchor.rowIndex && column === dragState.anchor.column) {
+        return
+      }
+      hasMovedRef.current = true
+      setIsDragging(true)
+    }
+    setDragPreview({ anchor: dragState.anchor, current: dragState.current })
   }
 
   function handleClearSelection() {
@@ -511,7 +540,7 @@ export function TableView({ sheet }: TableViewProps) {
           keep working -- a transform on any ancestor of a sticky element creates a new
           containing block and breaks its stickiness relative to the actual scroll viewport.
         */}
-        <table className="data-grid-table">
+        <table className={`data-grid-table${isDragging ? ' data-grid-dragging' : ''}`}>
           <thead>
             <tr style={{ height: ROW_HEIGHT }}>
               <th className="data-grid-row-number">#</th>

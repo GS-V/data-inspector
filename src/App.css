@@ -1145,7 +1145,9 @@ td {
    top of a mark color (review/problem/custom/etc.) already painted on the same <td>. Applied
    per-cell regardless of whether the whole row also happens to be fully selected. */
 .selected-cell {
-  box-shadow: inset 0 0 0 2px var(--accent);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background-color: var(--color-accent-soft) !important;
 }
 
 /* The anchor cell (where a shift-click/shift-arrow extension originates) gets a visibly
@@ -1255,6 +1257,14 @@ td:nth-child(7) {
 .data-grid-table {
   width: 100%;
   table-layout: auto;
+}
+
+/* Applied while a cell drag is in progress so the browser's native text-selection (blue
+   copy-highlight, text cursor) doesn't hijack the drag instead of the cell rectangle. */
+.data-grid-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
 }
 
 /* The two spacer <tr>s that stand in for the rows scrolled out of the current window. */

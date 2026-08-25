@@ -24,12 +24,46 @@ function App() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme)
   const workbook = useDataInspectorStore((state) => state.workbook)
   const auditLogLength = useDataInspectorStore((state) => state.auditLog.length)
+  const undoLastActionGroup = useDataInspectorStore((state) => state.undoLastActionGroup)
   const hasUnsavedWork = Boolean(workbook && auditLogLength > 0)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('data-inspector-theme', theme)
   }, [theme])
+
+  // Global Cmd/Ctrl+Z (undo) and Cmd/Ctrl+Shift+Z (redo) -- same undoLastActionGroup the "Undo
+  // last action" button calls. Redo has no store-side stack yet, so it's stubbed with a
+  // console.warn rather than either silently swallowing the shortcut or leaving it unbound.
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey
+      if (!mod) {
+        return
+      }
+
+      // Let native undo/redo run inside text fields (the New Value input, the reason note, etc.)
+      // instead of hijacking it for the app-level action history.
+      const tag = event.target instanceof HTMLElement ? event.target.tagName : ''
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        return
+      }
+
+      if (event.key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        undoLastActionGroup()
+        return
+      }
+
+      if ((event.key === 'z' && event.shiftKey) || event.key === 'y') {
+        event.preventDefault()
+        console.warn('Redo is not implemented yet -- wire this shortcut to a redo action once one exists.')
+      }
+    }
+
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [undoLastActionGroup])
 
   useEffect(() => {
     if (!hasUnsavedWork) {
