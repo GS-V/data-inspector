@@ -1127,6 +1127,87 @@ button:disabled {
   margin-top: 8px;
 }
 
+.code-modal {
+  width: min(680px, 100%);
+  max-width: 680px;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 94%, var(--accent-soft)), var(--panel-bg));
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.46);
+}
+
+.code-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.code-modal h2 {
+  margin: 0;
+  color: var(--strong-text);
+  font-size: 18px;
+}
+
+.code-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.code-tab {
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: var(--muted-text);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.code-tab:hover {
+  color: var(--strong-text);
+}
+
+.code-tab-active {
+  color: var(--strong-text);
+  border-bottom-color: var(--accent);
+}
+
+.code-tab-ext {
+  color: var(--caption-text);
+}
+
+.code-preview {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-y: auto;
+  max-height: 400px;
+  background: var(--panel-subtle);
+  padding: 12px;
+  border-radius: 6px;
+  white-space: pre;
+  color: var(--body-text);
+  border: 1px solid var(--color-border);
+}
+
+.code-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .table-wrap {
   max-height: none;
   flex: 1;

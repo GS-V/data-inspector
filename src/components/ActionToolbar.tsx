@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AuditLogPanel } from './AuditLogPanel'
+import { CodeModal } from './CodeModal'
 import { Icon } from './Icon'
 import type { IconName } from './Icon'
 import { InfoTip } from './InfoTip'
@@ -109,6 +110,8 @@ export function ActionToolbar() {
     blankMarkedInCurrentColumn,
     imputeMissingValues,
     undoLastActionGroup,
+    generatePythonScript,
+    generateRScript,
   } = useDataInspectorStore()
   const [replacementValue, setReplacementValue] = useState('')
   const [replacementMessage, setReplacementMessage] = useState('')
@@ -128,6 +131,7 @@ export function ActionToolbar() {
   const [activeTab, setActiveTab] = useState<'actions' | 'audit'>('actions')
   const [actionBusy, setActionBusy] = useState(false)
   const [undoBusy, setUndoBusy] = useState(false)
+  const [showCodeModal, setShowCodeModal] = useState(false)
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
   const targetCount = new Set([...Object.keys(selectedCells), ...Object.keys(previewCells)]).size
@@ -705,6 +709,15 @@ export function ActionToolbar() {
             {isAuditExportBusy ? <span className="spinner button-spinner" aria-hidden="true" /> : <Icon name="clipboard" />}
             Export audit log
           </button>
+          <button
+            type="button"
+            onClick={() => setShowCodeModal(true)}
+            disabled={!workbook}
+            title="Generate a Python or R script that reproduces this session's cleaned state"
+          >
+            <Icon name="code" />
+            Generate code
+          </button>
           {statusText ? (
             <p className={exportStatus === 'failed' ? 'error-text export-status' : 'hint export-status'}>
               {statusText}
@@ -791,6 +804,15 @@ export function ActionToolbar() {
           auditLog={auditLog}
           transformHistory={transformHistory}
           onClose={() => setShowQcReport(false)}
+        />
+      ) : null}
+
+      {showCodeModal && workbook ? (
+        <CodeModal
+          pythonScript={generatePythonScript()}
+          rScript={generateRScript()}
+          fileName={workbook.fileName}
+          onClose={() => setShowCodeModal(false)}
         />
       ) : null}
     </aside>

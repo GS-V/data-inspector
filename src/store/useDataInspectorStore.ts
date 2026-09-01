@@ -24,6 +24,7 @@ import { buildRowIdentifier, findValueColumns, getEffectiveValue, isDateCol, isM
 import { formatNumber, summarizeNumbers } from '../utils/stats'
 import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue } from '../utils/transforms'
 import { exportSession } from '../utils/sessionIO'
+import { generatePythonScript as genPy, generateRScript as genR } from '../utils/generateScript'
 
 type CellChange = {
   cellId: CellId
@@ -118,6 +119,8 @@ type DataInspectorState = {
   undoLastActionGroup: () => void
   saveSession: () => void
   restoreSession: (session: SessionFile, options?: { force?: boolean }) => { warnings: string[] }
+  generatePythonScript: () => string
+  generateRScript: () => string
 }
 
 function makeId(prefix: string): string {
@@ -940,6 +943,30 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       })
 
       return { warnings: [] }
+    },
+
+    generatePythonScript: () => {
+      const state = get()
+      if (!state.workbook) return ''
+      return genPy({
+        workbook: state.workbook,
+        cellState: state.cellState,
+        transformHistory: state.transformHistory,
+        auditLog: state.auditLog,
+        undoStack: state.undoStack,
+      })
+    },
+
+    generateRScript: () => {
+      const state = get()
+      if (!state.workbook) return ''
+      return genR({
+        workbook: state.workbook,
+        cellState: state.cellState,
+        transformHistory: state.transformHistory,
+        auditLog: state.auditLog,
+        undoStack: state.undoStack,
+      })
     },
   }
 })
