@@ -8,6 +8,10 @@ export type VisibleColumnValue = {
   value: number
 }
 
+// Okabe-Ito colorblind-safe palette, used in order for comparison-column overlays (chart only).
+// Deliberately excludes #56B4E9 (sky blue) -- too close to the app's primary accent blue.
+export const COMPARISON_COLOR_PALETTE = ['#E69F00', '#009E73', '#CC79A7', '#D55E00']
+
 /**
  * Numeric values for a column, excluding cells blanked via valueOverride: null.
  * Mirrors the filtering the histogram branch has always used.

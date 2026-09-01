@@ -233,6 +233,21 @@
   margin-top: 3px;
 }
 
+.guidance-subsection {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.guidance-subsection strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--strong-text);
+  font-size: 12px;
+}
+
 .privacy-panel {
   border-style: dashed;
 }
@@ -727,6 +742,13 @@ button:disabled {
 
 .chart-tip {
   flex: 1 1 auto;
+  /* Truncate to one line instead of wrapping -- without min-width: 0, a flex item can't shrink
+     below its text's natural width, so long tip copy would push .chart-actions onto a second
+     line (or wrap internally), doubling the toolbar's height. */
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   padding: 8px 10px;
   border: 1px solid var(--accent-border);
   border-radius: 7px;
@@ -1379,9 +1401,27 @@ th.data-grid-row-number {
   background: var(--panel-subtle);
 }
 
-.chart-panel > div:not(.chart-toolbar) {
+/* Generic fallback for a chart-panel's main content div (the loading-overlay div, TableView's own
+   wrapper) -- excludes .chart-active-columns too (the small "NDVI · OSAVI" header line), since
+   that's also a bare div here and would otherwise compete for this same flex:1 share, squeezing
+   the actual plot area down into a fraction of the panel.
+   FRAGILE, READ BEFORE TOUCHING THE CHART HEADER: this selector has broken chart height twice
+   already (once when a header label div was added, again when it got wrapped in a row div for an
+   export button) because it grants flex:1 to "any bare div here" and relies on remembering to
+   exclude every new one by name. If you add ANOTHER direct-child div under .chart-panel (in any
+   of the return blocks in InspectorChart.tsx), either give it its own class and add it to this
+   :not() chain, or better, give it a dedicated non-growing rule (see .chart-active-columns below)
+   instead of depending on exclusion from this catch-all. The Plot wrapper (.chart-plot-area)
+   doesn't rely on this catch-all at all -- it has its own explicit flex:1 rule below. */
+.chart-panel > div:not(.chart-toolbar):not(.chart-active-columns) {
   flex: 1;
   min-height: 0;
+}
+
+.chart-plot-area {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .table-panel {
@@ -2966,6 +3006,233 @@ button {
   max-height: 200px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+/* ── Compare columns dropdown (chart overlay picker) ───────────────── */
+
+.compare-columns-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.compare-columns-row-label {
+  flex-shrink: 0;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compare-columns-row .compare-columns-dropdown {
+  flex: 1;
+  min-width: 0;
+}
+
+.compare-color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  flex-shrink: 0;
+}
+
+.compare-columns-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0 10px;
+  color: var(--strong-text);
+  background: var(--panel-bg);
+  font-weight: 600;
+}
+
+.compare-columns-toggle .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted-text);
+}
+
+/* Positioned via inline top/left/width (computed from the toggle button's bounding rect) and
+   portaled to document.body -- rendering it in place would clip it against the sidebar's
+   overflow-y: auto as soon as it grows past the visible scroll area. */
+.compare-columns-panel {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow);
+}
+
+.compare-columns-clear {
+  justify-self: start;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.compare-columns-clear:disabled {
+  color: var(--muted-text);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* ── Chart header / comparison overlay notice ──────────────────────── */
+
+.chart-active-columns {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--strong-text);
+  letter-spacing: 0.01em;
+}
+
+/* ── Chart export popover ───────────────────────────────────────────── */
+/* The trigger button now lives inline among the toolbar's other action buttons (Hide blanked
+   points, Clear selection, Clear preview, Lines), so it inherits their height/border/background
+   from the generic ".chart-actions button" rule -- only icon-only sizing is set here. */
+
+.chart-export {
+  flex-shrink: 0;
+}
+
+.chart-export-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+  color: var(--muted-text);
+}
+
+.chart-export-toggle:hover {
+  color: var(--strong-text);
+}
+
+.chart-export-toggle .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.chart-export-panel {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 9px;
+  width: min(220px, 88vw);
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow);
+}
+
+.chart-export-dims {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.chart-export-field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chart-export-field input {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.chart-export-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.chart-export-presets button {
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel-subtle);
+  color: var(--body-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart-export-format {
+  justify-self: start;
+}
+
+.chart-export-format button {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+
+.chart-export-error {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--problem-border);
+  border-radius: 6px;
+  color: var(--danger-text);
+  background: var(--danger-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart-export-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.chart-export-download .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.chart-inline-notice {
+  margin: 0 0 8px;
+  padding: 6px 9px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 7px;
+  color: var(--muted-text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.chart-lines-toggle[aria-pressed="true"] {
+  color: var(--strong-text);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 /* ── QC report modal ───────────────────────────────────────────────── */

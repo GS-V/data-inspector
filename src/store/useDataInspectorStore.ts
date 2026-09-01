@@ -19,7 +19,7 @@ import type {
 import { ROW_ORDER_AXIS } from '../types/data'
 import { getVisibleColumnValues } from '../utils/chartData'
 import { makeCellId, parseCellId } from '../utils/cellId'
-import { buildRowIdentifier, findNumericColumns, getEffectiveValue, isMissing } from '../utils/numeric'
+import { buildRowIdentifier, findValueColumns, getEffectiveValue, isDateCol, isMissing } from '../utils/numeric'
 import { formatNumber, summarizeNumbers } from '../utils/stats'
 import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue } from '../utils/transforms'
 
@@ -50,6 +50,10 @@ type DataInspectorState = {
   selectedColumn: string
   xAxis: string
   plotType: PlotType
+  // Additional numeric columns overlaid on the chart alongside selectedColumn -- visualization-only.
+  // Cleaning tools, the stats panel, and transforms always operate on selectedColumn regardless of
+  // this list. Cleared whenever selectedColumn, the active sheet, or the workbook changes.
+  comparisonColumns: string[]
   // Transient, UI-only cell targeting: selectedCells is the user's manual click/drag selection,
   // previewCells is whatever a review tool (outlier/duplicate/threshold preview) last suggested.
   // Neither is persisted -- they're cleared on column/sheet change and never written to the audit log.
@@ -82,6 +86,9 @@ type DataInspectorState = {
   setSelectedColumn: (columnName: string, options?: { preserveSelection?: boolean }) => void
   setXAxis: (xAxis: string) => void
   setPlotType: (plotType: PlotType) => void
+  addComparisonColumn: (columnName: string) => void
+  removeComparisonColumn: (columnName: string) => void
+  clearComparisonColumns: () => void
   toggleSelectedCell: (cellId: CellId) => void
   addSelectedCells: (cellIds: CellId[]) => void
   clearSelection: () => void
@@ -151,7 +158,7 @@ function getFirstNumericColumn(sheet?: SheetData): string {
     return ''
   }
 
-  return findNumericColumns(sheet.rows, sheet.columns)[0] ?? sheet.columns[0] ?? ''
+  return findValueColumns(sheet.rows, sheet.columns)[0] ?? sheet.columns[0] ?? ''
 }
 
 function getRawValue(sheet: SheetData, rowIndex: number, columnName: string): RawCellValue {
@@ -335,6 +342,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     selectedColumn: '',
     xAxis: ROW_ORDER_AXIS,
     plotType: 'scatter',
+    comparisonColumns: [],
     selectedCells: {},
     isSelecting: false,
     previewCells: {},
@@ -355,6 +363,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         selectedColumn,
         xAxis: ROW_ORDER_AXIS,
         plotType: 'scatter',
+        comparisonColumns: [],
         selectedCells: {},
         previewCells: {},
         cellState: {},
@@ -367,14 +376,16 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     setActiveSheetName: (sheetName) => {
       const sheet = getSheet(get().workbook, sheetName)
       const currentColumn = get().selectedColumn
-      const numericColumns = findNumericColumns(sheet?.rows ?? [], sheet?.columns ?? [])
+      const valueColumns = findValueColumns(sheet?.rows ?? [], sheet?.columns ?? [])
       const selectedColumn =
-        currentColumn && numericColumns.includes(currentColumn)
+        currentColumn && valueColumns.includes(currentColumn)
           ? currentColumn
           : getFirstNumericColumn(sheet)
+      // X-axis accepts any column (date, numeric, or string/categorical), so its validity check
+      // is against the sheet's full column list, not just the numeric-value ones.
       const currentXAxis = get().xAxis
       const xAxis =
-        currentXAxis === ROW_ORDER_AXIS || numericColumns.includes(currentXAxis)
+        currentXAxis === ROW_ORDER_AXIS || (sheet?.columns ?? []).includes(currentXAxis)
           ? currentXAxis
           : ROW_ORDER_AXIS
 
@@ -382,6 +393,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         activeSheetName: sheetName,
         selectedColumn,
         xAxis,
+        comparisonColumns: [],
         selectedCells: {},
         previewCells: {},
       })
@@ -391,15 +403,44 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       if (options?.preserveSelection) {
         // Used only by TableView's ctrl/cmd-click, which needs to move the active column to
         // whatever cell was just clicked without wiping cells already selected in other columns.
-        set({ selectedColumn: columnName })
+        set({ selectedColumn: columnName, comparisonColumns: [] })
       } else {
-        set({ selectedColumn: columnName, selectedCells: {}, previewCells: {} })
+        set({ selectedColumn: columnName, selectedCells: {}, previewCells: {}, comparisonColumns: [] })
       }
     },
 
-    setXAxis: (xAxis) => set({ xAxis }),
+    setXAxis: (xAxis) => {
+      // A column can't be both the X-axis and a comparison overlay (it would plot as a trivial
+      // diagonal against itself) -- drop it from comparisonColumns if it's already checked there.
+      const { comparisonColumns } = get()
+      set({ xAxis, comparisonColumns: comparisonColumns.filter((column) => column !== xAxis) })
+    },
 
+    // Every chart type either supports the comparison overlay (scatter, histogram, box, violin,
+    // density, cdf, qq) or simply ignores it (table), so switching plot types never needs to
+    // clear comparisonColumns.
     setPlotType: (plotType) => set({ plotType }),
+
+    addComparisonColumn: (columnName) => {
+      const { comparisonColumns, selectedColumn, xAxis, workbook, activeSheetName } = get()
+      const sheet = getSheet(workbook, activeSheetName)
+      if (
+        columnName === selectedColumn ||
+        columnName === xAxis ||
+        comparisonColumns.includes(columnName) ||
+        comparisonColumns.length >= 4 ||
+        (sheet && isDateCol(columnName, sheet.rows))
+      ) {
+        return
+      }
+      set({ comparisonColumns: [...comparisonColumns, columnName] })
+    },
+
+    removeComparisonColumn: (columnName) => {
+      set({ comparisonColumns: get().comparisonColumns.filter((column) => column !== columnName) })
+    },
+
+    clearComparisonColumns: () => set({ comparisonColumns: [] }),
 
     toggleSelectedCell: (cellId) => {
       const selectedCells = { ...get().selectedCells }

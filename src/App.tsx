@@ -127,6 +127,13 @@ function App() {
                 <li>Add a reason when changing data.</li>
                 <li>Export cleaned data, the audit log, or a QC report summarizing what changed.</li>
               </ol>
+              <p className="guidance-subsection">
+                <strong>Compare columns</strong>
+                Select additional numeric columns to overlay on the same chart. Each column is plotted in a
+                distinct color with a legend. Comparison columns are for visualization only — all cleaning,
+                transform, and statistics tools continue to operate on the primary selected column. Not
+                available in Density, CDF, Q-Q, or Table view.
+              </p>
             </details>
           </section>
           <InspectorControls />

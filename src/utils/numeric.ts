@@ -46,7 +46,7 @@ export function getDisplayValue(value: RawCellValue): string {
 }
 
 /**
- * A column counts as numeric if at least `minimumNumericRatio` (default 60%) of its
+ * A column counts as numeric if at least `minimumNumericRatio` (default 50%) of its
  * non-empty values parse as numbers — a threshold rather than "all values," so a handful
  * of stray text entries (typos, "N/A") don't disqualify an otherwise numeric column.
  * A column with zero non-empty values is treated as not numeric rather than dividing by zero.
@@ -54,7 +54,7 @@ export function getDisplayValue(value: RawCellValue): string {
 export function findNumericColumns(
   rows: RowData[],
   columns: string[],
-  minimumNumericRatio = 0.6,
+  minimumNumericRatio = 0.5,
 ): string[] {
   return columns.filter((column) => {
     let nonEmptyValues = 0
@@ -81,6 +81,19 @@ export function findNumericColumns(
 }
 
 
+export function isDateCol(col: string, rows: RowData[]): boolean {
+  return rows.some((row) => row[col] instanceof Date)
+}
+
+/**
+ * Numeric columns suitable for being a plotted VALUE (Y-axis, comparison overlay) -- numeric
+ * per findNumericColumns, with date columns excluded. A date is an axis dimension, not a value:
+ * toNumber() converts it to a valid epoch-ms number, so it would otherwise pass the numeric check.
+ */
+export function findValueColumns(rows: RowData[], columns: string[]): string[] {
+  return findNumericColumns(rows, columns).filter((column) => !isDateCol(column, rows))
+}
+
 export function findIdentifierColumns(
   rows: RowData[],
   columns: string[],
@@ -88,8 +101,7 @@ export function findIdentifierColumns(
   const numericSet = new Set(findNumericColumns(rows, columns))
   // Date columns are classified as numeric by toNumber() (returns timestamp ms),
   // but they are human-readable identifiers — include them regardless.
-  const isDateCol = (col: string) => rows.some((row) => row[col] instanceof Date)
-  return columns.filter((col) => !numericSet.has(col) || isDateCol(col)).slice(0, 3)
+  return columns.filter((col) => !numericSet.has(col) || isDateCol(col, rows)).slice(0, 3)
 }
 
 export function buildRowIdentifier(
