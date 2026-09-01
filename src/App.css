@@ -302,6 +302,73 @@
   text-align: left;
 }
 
+.session-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.session-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  background: var(--color-action-bg);
+  color: var(--button-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.session-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.session-btn:not(:disabled):hover {
+  background: var(--panel-subtle);
+}
+
+.session-confirm-dialog {
+  background: var(--panel-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  max-width: 380px;
+  width: 90%;
+  font-size: 14px;
+}
+
+.session-confirm-dialog p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.session-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.session-confirm-buttons button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-action-bg);
+  color: var(--button-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.session-confirm-primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
 .label,
 .hint,
 .muted {
@@ -903,6 +970,14 @@ button:disabled {
 :root:not([data-theme='dark']) .count-chip.custom { color: var(--custom-text); }
 :root:not([data-theme='dark']) .count-chip.blanked { color: var(--blanked-text); }
 :root:not([data-theme='dark']) .count-chip.imputed { color: var(--imputed-text); }
+
+/* .review-icon/.problem-icon/.keep-icon read --*-border (below) rather than --*-text, so that in
+   dark mode the icon lands on the same saturated tone the border already uses. Light mode's border
+   variables are deliberately low-opacity (for button/pill borders), which would render these icons
+   washed out -- so light mode alone repoints them at the solid --*-text color instead. */
+:root:not([data-theme='dark']) .review-icon { color: var(--review-text); }
+:root:not([data-theme='dark']) .problem-icon { color: var(--problem-text); }
+:root:not([data-theme='dark']) .keep-icon { color: var(--keep-text); }
 
 .button-group,
 .mark-grid {

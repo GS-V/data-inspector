@@ -1,7 +1,7 @@
 export type IconName =
   | 'flag' | 'alert' | 'check-circle' | 'palette' | 'x-circle'
   | 'outlier' | 'copy' | 'distance' | 'swap' | 'eraser' | 'undo'
-  | 'download' | 'clipboard' | 'report' | 'compress' | 'soften' | 'auto' | 'bell'
+  | 'download' | 'upload' | 'clipboard' | 'report' | 'compress' | 'soften' | 'auto' | 'bell'
   | 'sun' | 'search' | 'eye' | 'folder-open' | 'chevron-down' | 'fill'
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -52,6 +52,9 @@ export function IconSprite() {
       </symbol>
       <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3v12" /><polyline points="7 11 12 16 17 11" /><path d="M4 20h16" />
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21V9" /><polyline points="7 13 12 8 17 13" /><path d="M4 20h16" />
       </symbol>
       <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="5.5" y="4" width="13" height="17" rx="2" /><path d="M9 4V2.6A1.6 1.6 0 0 1 10.6 1h2.8A1.6 1.6 0 0 1 15 2.6V4" />

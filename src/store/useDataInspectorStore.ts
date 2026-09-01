@@ -11,6 +11,7 @@ import type {
   PlotType,
   PreviewCell,
   RawCellValue,
+  SessionFile,
   SheetData,
   TransformationType,
   TransformAttempt,
@@ -22,6 +23,7 @@ import { makeCellId, parseCellId } from '../utils/cellId'
 import { buildRowIdentifier, findValueColumns, getEffectiveValue, isDateCol, isMissing } from '../utils/numeric'
 import { formatNumber, summarizeNumbers } from '../utils/stats'
 import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue } from '../utils/transforms'
+import { exportSession } from '../utils/sessionIO'
 
 type CellChange = {
   cellId: CellId
@@ -114,6 +116,8 @@ type DataInspectorState = {
   setRequireReason: (requireReason: boolean) => void
   checkColumnNormality: (columnNames: string[]) => NormalityTestResult | null
   undoLastActionGroup: () => void
+  saveSession: () => void
+  restoreSession: (session: SessionFile, options?: { force?: boolean }) => { warnings: string[] }
 }
 
 function makeId(prefix: string): string {
@@ -879,6 +883,63 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         auditLog: [...state.auditLog, ...undoActions],
         undoStack: state.undoStack.slice(0, -1),
       })
+    },
+
+    saveSession: () => {
+      const state = get()
+      if (!state.workbook) return
+      const session: SessionFile = {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        sourceFileName: state.workbook.fileName,
+        activeSheetName: state.activeSheetName,
+        selectedColumn: state.selectedColumn,
+        xAxis: state.xAxis,
+        plotType: state.plotType,
+        comparisonColumns: state.comparisonColumns,
+        requireReason: state.requireReason,
+        normalityTestType: state.normalityTestType,
+        normalityThreshold: state.normalityThreshold,
+        cellState: state.cellState,
+        auditLog: state.auditLog,
+        undoStack: state.undoStack,
+        transformHistory: state.transformHistory,
+      }
+      exportSession(session)
+    },
+
+    restoreSession: (session, options) => {
+      const state = get()
+      if (!state.workbook) return { warnings: [] }
+
+      if (!options?.force && session.sourceFileName !== state.workbook.fileName) {
+        return {
+          warnings: [
+            `Session was saved for "${session.sourceFileName}". ` +
+            `Current file is "${state.workbook.fileName}". Restore anyway?`
+          ]
+        }
+      }
+
+      set({
+        activeSheetName: session.activeSheetName,
+        selectedColumn: session.selectedColumn,
+        xAxis: session.xAxis,
+        plotType: session.plotType,
+        comparisonColumns: session.comparisonColumns,
+        requireReason: session.requireReason,
+        normalityTestType: session.normalityTestType,
+        normalityThreshold: session.normalityThreshold,
+        cellState: session.cellState,
+        auditLog: session.auditLog,
+        undoStack: session.undoStack,
+        transformHistory: session.transformHistory,
+        selectedCells: {},
+        previewCells: {},
+        isSelecting: false,
+      })
+
+      return { warnings: [] }
     },
   }
 })

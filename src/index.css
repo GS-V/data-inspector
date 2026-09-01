@@ -6,13 +6,13 @@
      the whole app picks up Periwinkle without touching component files. Chip variable names keep
      their existing --color-{status}-bg/text form (no "chip-" infix) rather than the names used
      keep their prior (Indigo Mist) values unchanged. */
-  --color-app-bg: #f8f9ff;
-  --color-sidebar-bg: #dde4f4;
-  --color-action-bg: #d8dff0;
-  --color-card-bg: #ffffff;
+  --color-app-bg: #bfcce8;
+  --color-sidebar-bg: #d6dff2;
+  --color-action-bg: #c8d4ec;
+  --color-card-bg: #f0f4ff;
   --color-chart-bg: #f8f9ff;
   --color-input-bg: #ffffff;
-  --color-border: #b8c4e4;
+  --color-border: #9eaed4;
   --color-border-light: #c8d0ec;
   --color-text-primary: #141830;
   --color-text-secondary: #303870;
@@ -22,12 +22,12 @@
   --color-accent-soft: rgba(48, 64, 200, 0.22);
   --color-selected-bg: #dce4fc;
   --color-selected-text: #2030b0;
-  --color-review-bg: #fef3cc;
-  --color-review-text: #6a5000;
-  --color-problem-bg: #fde0de;
-  --color-problem-text: #7a2020;
-  --color-accepted-bg: #d4f0e4;
-  --color-accepted-text: #145230;
+  --color-review-bg: rgba(180, 130, 0, 0.18);
+  --color-review-text: #7a5500;
+  --color-problem-bg: rgba(180, 40, 40, 0.14);
+  --color-problem-text: #8b1a1a;
+  --color-accepted-bg: rgba(0, 120, 60, 0.14);
+  --color-accepted-text: #0a5c30;
   --color-blanked-bg: #ececf4;
   --color-blanked-text: #404080;
   --color-imputed-bg: #e0e8ff;
@@ -57,13 +57,13 @@
   --accent-text: var(--color-accent-hover);
   --shadow: 0 14px 32px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
   --review-bg: var(--color-review-bg);
-  --review-border: #fde68a;
+  --review-border: rgba(180, 130, 0, 0.35);
   --review-text: var(--color-review-text);
   --problem-bg: var(--color-problem-bg);
-  --problem-border: #fecaca;
+  --problem-border: rgba(180, 40, 40, 0.3);
   --problem-text: var(--color-problem-text);
   --keep-bg: var(--color-accepted-bg);
-  --keep-border: #bbf7d0;
+  --keep-border: rgba(0, 120, 60, 0.28);
   --keep-text: var(--color-accepted-text);
   --custom-bg: var(--color-custom-bg);
   --custom-border: #fbcfe8;

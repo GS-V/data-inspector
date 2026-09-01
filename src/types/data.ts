@@ -162,3 +162,21 @@ export const IMPUTATION_METHOD_OPTIONS: { value: ImputationMethod; label: string
 ]
 
 export const ROW_ORDER_AXIS = '__row_order__'
+
+export type SessionFile = {
+  version: 1
+  savedAt: string
+  sourceFileName: string
+  activeSheetName: string
+  selectedColumn: string
+  xAxis: string
+  plotType: PlotType
+  comparisonColumns: string[]
+  requireReason: boolean
+  normalityTestType: NormalityTestType
+  normalityThreshold: number
+  cellState: Record<string, CellState>
+  auditLog: AuditAction[]
+  undoStack: AuditAction[][]
+  transformHistory: TransformAttempt[]
+}

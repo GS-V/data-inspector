@@ -163,7 +163,7 @@ function coerceXlsxExportCellValue(value: RawCellValue): ExportCellValue {
   return value
 }
 
-function downloadBlob(fileName: string, blob: Blob) {
+export function downloadBlob(fileName: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
