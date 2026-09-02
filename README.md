@@ -19,19 +19,28 @@ reproducible.
 - Sheet switcher for workbooks with multiple tabs
 - Preserves original data — edits are tracked as an overlay, never written
   back to the source
+- Large file protection — files are classified before parsing (safe / warning /
+  high-risk / reject); oversized files prompt a confirmation dialog or are
+  blocked outright (CSV: warn at 250 MB; Excel: warn at 75 MB; hard limit 1 GB)
 
 ### Visualization
 - **Table** — interactive data grid with windowed rendering, Excel-style
   multi-cell selection (click, drag, Shift+click, Ctrl/Cmd+click), frozen
   headers, and live highlight overlay
-- **Scatter** — column vs column with optional date X-axis and multi-column
-  comparison overlay (up to 4 columns)
+- **Scatter** — column vs column; X-axis can be row order, a date column, or
+  any other column
 - **Histogram** — distribution with configurable bins
 - **Box plot** — spread and quartiles per column
 - **Violin** — density + spread combined
 - **Q-Q plot** — normality check vs theoretical quantiles
 - **Density (KDE)** — kernel density estimate
 - **Cumulative distribution (CDF)**
+- **Compare columns** — overlay up to 4 additional numeric columns on the same
+  chart for side-by-side visual comparison; available in Scatter, Histogram,
+  Box, Violin, Density, CDF, and Q-Q views; not available in Table view
+- **Chart export** — download the active chart as PNG or SVG; set output
+  dimensions manually or use the "Current" preset to match the chart's live
+  on-screen size
 
 ### Outlier and quality review
 - IQR-based outlier preview (Tukey's fence, configurable multiplier)
