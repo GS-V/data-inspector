@@ -1,3 +1,9 @@
+/*
+ * Chart-shape computations: visible column values, box-plot statistics, KDE, CDF, and Q-Q points.
+ * Pure functions -- no React, no Plotly, no Zustand. The caller owns all rendering.
+ * getVisibleColumnValues is the only entry point that reads cellState. It drops blanked cells
+ * (valueOverride: null), so a blanked value never reaches a chart.
+ */
 import type { CellId, CellState, SheetData } from '../types/data'
 import { makeCellId } from './cellId'
 import { getEffectiveValue, toNumber } from './numeric'
@@ -13,8 +19,10 @@ export type VisibleColumnValue = {
 export const COMPARISON_COLOR_PALETTE = ['#E69F00', '#009E73', '#CC79A7', '#D55E00']
 
 /**
- * Numeric values for a column, excluding cells blanked via valueOverride: null.
- * Mirrors the filtering the histogram branch has always used.
+ * Return the plottable numeric values of a column, each paired with its row index and cell key.
+ * Skip any cell blanked through valueOverride: null, and any value that does not parse as a
+ * number. Every chart and every transform reads a column through this function, so all of them
+ * agree on which cells currently count as data.
  */
 export function getVisibleColumnValues(
   sheet: SheetData,

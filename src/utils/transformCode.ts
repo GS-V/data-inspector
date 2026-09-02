@@ -1,3 +1,9 @@
+/*
+ * Generate the per-transform code snippet behind each "Copy as code" button in
+ * TransformHistoryPanel. This module renders one TransformAttempt entry only.
+ * generateScript.ts is the separate generator that emits a full script for the whole session.
+ * Pure functions -- no React, no Zustand, no clipboard access. The caller copies the string.
+ */
 import type { TransformAttempt } from '../types/data'
 
 function formatNumberForCode(value: number): string {
@@ -83,16 +89,22 @@ function rLine(entry: TransformAttempt, column: string): string {
 }
 
 /**
- * One pandas assignment line per transformed column. For multi-column batch transforms,
- * z-score's mean/SD come from statsBefore, which is computed across all columns in the batch
- * combined -- not recomputed per column -- so a multi-column z-score snippet reuses the same
- * (mean, sd) pair on every line rather than each column's own statistics.
+ * Return one pandas assignment line per transformed column.
+ * A z-score line inlines entry.statsBefore.mean and entry.statsBefore.standardDeviation. For a
+ * multi-column batch those two numbers cover every column in the batch combined. They are not
+ * recomputed per column, so each line of a multi-column z-score snippet reuses the same pair.
+ * The snippet is therefore an approximation meant for display. generateScript.ts emits .mean()
+ * and .std(ddof=1) calls instead, so the two generators do not produce identical z-score code.
  */
 export function transformToPython(entry: TransformAttempt): string {
   return entry.columns.map((column) => pythonLine(entry, column)).join('\n')
 }
 
-/** Same caveat as transformToPython: multi-column z-score reuses the batch-level mean/SD. */
+/**
+ * Return one R assignment line per transformed column.
+ * The same z-score caveat as transformToPython applies. A multi-column batch reuses the
+ * batch-level mean and SD, and generateScript.ts emits mean() and sd() calls instead.
+ */
 export function transformToR(entry: TransformAttempt): string {
   return entry.columns.map((column) => rLine(entry, column)).join('\n')
 }

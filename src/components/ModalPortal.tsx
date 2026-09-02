@@ -12,9 +12,9 @@ export function ModalPortal({ children, onBackdropClick }: ModalPortalProps) {
       className="modal-backdrop"
       role="presentation"
       onClick={(event) => {
-        // A click starting anywhere inside `children` (e.g. a modal's own Export button) still
-        // bubbles up to this div. Only treat it as a backdrop click -- and thus a dismissal --
-        // when the backdrop itself was the actual click target, not a bubbled child click.
+        // A click on anything inside `children`, such as a modal's own Export button, still
+        // bubbles up to this div. Dismiss only when the backdrop was the real click target.
+        // Without the check, every click inside the modal would close it.
         if (event.target === event.currentTarget) {
           onBackdropClick?.()
         }

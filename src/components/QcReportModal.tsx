@@ -49,11 +49,11 @@ export function QcReportModal({
   const [qcExportKind, setQcExportKind] = useState<'csv' | 'pdf' | null>(null)
   const [qcExportError, setQcExportError] = useState('')
 
-  // Deferred by one tick (same pattern as the chart's isComputingChart gate) so the
-  // "Computing report..." state (report starts null, per useState above) can paint before
-  // this potentially-slow computation runs. The modal is freshly mounted each time it opens
-  // (see ActionToolbar's conditional render), so this effect's dep list changing mid-session
-  // is not a real-world case here -- there's no stale report to clear back to null first.
+  // Defer the build by one tick, the same technique as the chart's isComputingChart gate.
+  // `report` starts null, so the "Computing report..." state can paint before this potentially
+  // slow computation blocks the main thread.
+  // ActionToolbar mounts this modal fresh on every open, so these dependencies never change
+  // mid-session. There is no stale report to reset to null first.
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setReport(buildQcReport(workbook, cellState, auditLog, transformHistory))

@@ -1,3 +1,8 @@
+/*
+ * Detection rules that suggest cells for review: repeated values and percentile bounds.
+ * Pure functions -- no React, no Zustand, no cell state. Callers resolve effective values first.
+ * These functions only suggest cells. They never change data.
+ */
 import type { RawCellValue } from '../types/data'
 
 export type PercentileBounds = {

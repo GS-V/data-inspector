@@ -9,7 +9,10 @@ export type TransformParams = {
   base?: number
 }
 
-/** Natural log: y = ln(x). Requires x > 0; out-of-domain input returns null (skip) rather than NaN. */
+/**
+ * Natural log: y = ln(x). Requires x > 0.
+ * Out-of-domain input returns null, so the caller skips the cell rather than storing NaN.
+ */
 function applyLog(value: number, useOffset?: boolean): number | null {
   const input = useOffset ? value + 1 : value
   if (input <= 0) {
@@ -19,9 +22,9 @@ function applyLog(value: number, useOffset?: boolean): number | null {
 }
 
 /**
- * Log at a chosen base: y = ln(x) / ln(base), i.e. base 10 unless a different base is given.
- * Base 10 uses Math.log10 directly; any other base (> 1) uses the change-of-base identity.
- * Requires x > 0, same as natural log.
+ * Log at a chosen base: y = ln(x) / ln(base). The base is 10 unless another one is given.
+ * Base 10 calls Math.log10 directly. Any other base greater than 1 uses change of base.
+ * Requires x > 0, the same domain as natural log.
  */
 function applyLog10(value: number, useOffset?: boolean, base?: number): number | null {
   const input = useOffset ? value + 1 : value
@@ -34,7 +37,10 @@ function applyLog10(value: number, useOffset?: boolean, base?: number): number |
   return Math.log(input) / Math.log(base)
 }
 
-/** Square root: y = √x, requires x >= 0. Unlike the log-family transforms, x = 0 is in-domain (√0 = 0), so only negative input is skipped. */
+/**
+ * Square root: y = √x, requires x >= 0.
+ * x = 0 is in domain here (√0 = 0), unlike the log-family transforms. Only negative input skips.
+ */
 function applySqrt(value: number): number | null {
   if (value < 0) {
     return null
@@ -50,7 +56,10 @@ function applyBoxCox(value: number, lambda: number): number | null {
   return lambda === 0 ? Math.log(value) : (value ** lambda - 1) / lambda
 }
 
-/** Z-score: y = (x − mean) / SD. Undefined without both mean and SD, or when SD is 0 (constant column). */
+/**
+ * Z-score: y = (x − mean) / SD.
+ * Undefined without both mean and SD, and undefined when SD is 0 for a constant column.
+ */
 function applyZScore(value: number, mean?: number, sd?: number): number | null {
   if (mean === undefined || sd === undefined || sd === 0) {
     return null
@@ -58,7 +67,7 @@ function applyZScore(value: number, mean?: number, sd?: number): number | null {
   return (value - mean) / sd
 }
 
-/** Dispatches to the transform matching `type`. Returns null when the input is out of domain. */
+/** Dispatch to the transform matching `type`. Return null when the input is out of domain. */
 export function transformValue(value: number, type: TransformationType, params?: TransformParams): number | null {
   switch (type) {
     case 'log':
@@ -82,7 +91,7 @@ export type TransformFeasibility = {
   issues: string[]
 }
 
-/** Checks whether a transform can run on the given values, ignoring any +1 offset remedy. */
+/** Report whether a transform can run on these values, ignoring the +1 offset remedy. */
 export function validateTransformFeasibility(values: number[], type: TransformationType): TransformFeasibility {
   if (type === 'zscore') {
     if (values.length < 2) {
@@ -123,12 +132,12 @@ const ALTERNATIVE_TRANSFORMS: Record<TransformationType, TransformationType[]> =
   zscore: ['log', 'sqrt'],
 }
 
-/** Alternative transform types to suggest when the requested one is infeasible. */
+/** Return the transform types to suggest when the requested one is infeasible. */
 export function suggestAlternativeTransforms(type: TransformationType): TransformationType[] {
   return ALTERNATIVE_TRANSFORMS[type]
 }
 
-/** Adjusted Fisher-Pearson standardized moment coefficient (sample skewness). */
+/** Return the sample skewness, as the adjusted Fisher-Pearson standardized moment coefficient. */
 export function calculateSkewness(values: number[]): number | null {
   const n = values.length
   if (n < 3) {
@@ -147,7 +156,7 @@ export function calculateSkewness(values: number[]): number | null {
   return (n / ((n - 1) * (n - 2))) * sumCubed
 }
 
-/** Grid search over lambda in [-2, 2] step 0.05, minimizing |skewness| of the Box-Cox result. */
+/** Grid-search lambda over [-2, 2] in 0.05 steps, minimizing |skewness| of the Box-Cox result. */
 export function estimateOptimalBoxCoxLambda(values: number[]): number {
   const positiveValues = values.filter((value) => value > 0)
   if (positiveValues.length < 3) {
@@ -175,7 +184,7 @@ export function estimateOptimalBoxCoxLambda(values: number[]): number {
   return bestLambda
 }
 
-/** Coarse histogram bucket counts, used to draw a sparkline thumbnail. */
+/** Return coarse histogram bucket counts, used to draw a sparkline thumbnail. */
 export function computeSparkbucket(values: number[], bucketCount = 12): number[] {
   const buckets = new Array(bucketCount).fill(0)
   if (values.length === 0) {
@@ -198,7 +207,7 @@ export function computeSparkbucket(values: number[], bucketCount = 12): number[]
   return buckets
 }
 
-/** Convenience wrapper reusing chartData's cellState-aware value filter for plain numeric arrays. */
+/** Return a column's visible values as a plain numeric array, dropping the row and cell keys. */
 export function getColumnNumericValues(
   sheet: SheetData,
   columnName: string,
@@ -222,12 +231,12 @@ function erf(x: number): number {
   return sign * y
 }
 
-/** Forward standard normal CDF, Φ(z). Distinct from normalQuantile (its inverse) in chartData.ts. */
+/** Forward standard normal CDF, Φ(z). Its inverse is normalQuantile in chartData.ts. */
 export function normalCDF(z: number): number {
   return 0.5 * (1 + erf(z / Math.SQRT2))
 }
 
-/** Horner evaluation of a polynomial where coeffs[i] is the coefficient of x^i. */
+/** Evaluate a polynomial by Horner's method, where coeffs[i] is the coefficient of x^i. */
 function poly(coeffs: number[], x: number): number {
   let result = 0
   for (let i = coeffs.length - 1; i >= 0; i -= 1) {
@@ -237,24 +246,24 @@ function poly(coeffs: number[], x: number): number {
 }
 
 /**
- * Exact pairwise equality check for "all values identical," used instead of testing whether
- * a computed variance/sum-of-squares equals 0. Repeated floating-point summation of an
- * identical long-mantissa value (e.g. Math.log(7) added to itself 20 times, then divided by
- * n) does not always round-trip back to bit-identical the original value, so a constant
- * column's mean can differ from every element by ~1e-16 — making a `variance === 0` guard
- * fail to fire and letting a degenerate column produce a spurious nonzero statistic instead
- * of the "not computed" result it should. Comparing values directly has no such accumulation.
+ * Report whether every value is identical, by exact pairwise comparison.
+ * Do not test a computed variance or sum of squares against 0 instead. Summing one
+ * long-mantissa value repeatedly loses precision: Math.log(7) added to itself 20 times, then
+ * divided by 20, does not always return the original bits. A constant column's mean can
+ * therefore differ from every element by about 1e-16. A `variance === 0` guard then fails to
+ * fire, and a degenerate column reports a spurious statistic instead of "not computed".
+ * Comparing the values directly accumulates no such error.
  */
 function isConstant(values: number[]): boolean {
   return values.length > 0 && values.every((value) => value === values[0])
 }
 
 /**
- * Jarque-Bera test. Uses BIASED (population, divide-by-n) skewness and kurtosis —
- * this is the classic JB definition and deliberately does NOT reuse calculateSkewness(),
- * which computes the bias-corrected Fisher-Pearson G1 used for the before/after display.
- * Mixing the two would silently disagree with every reference implementation (R, scipy)
- * on the same data.
+ * Jarque-Bera test.
+ * Uses BIASED skewness and kurtosis, meaning the population form that divides by n. That is the
+ * classic Jarque-Bera definition. This deliberately does not reuse calculateSkewness(), which
+ * returns the bias-corrected Fisher-Pearson G1 used for the before/after display.
+ * Mixing the two forms would silently disagree with R and scipy on the same data.
  */
 export function jarqueBeraTest(values: number[]): NormalityTestResult {
   const n = values.length
@@ -302,11 +311,11 @@ export function jarqueBeraTest(values: number[]): NormalityTestResult {
 }
 
 /**
- * Shapiro-Wilk test, Royston's 1992/1995 approximation (AS R94), verified against R's
- * stats::shapiro.test C source. This is the default test — implement exactly as specified,
- * including the n<=5 vs n>5 weight-correction split and the n<=11 vs n>11 p-value split.
- * Skipping either split gives wrong p-values for small sample sizes, which are common
- * in field-trial replicate counts.
+ * Shapiro-Wilk test, Royston's 1992/1995 approximation (AS R94).
+ * Verified against the C source of R's stats::shapiro.test. This is the default test.
+ * Keep both branch splits exactly as specified: n <= 5 against n > 5 for the weight correction,
+ * and n <= 11 against n > 11 for the p-value. Dropping either split returns wrong p-values at
+ * small sample sizes, and field-trial replicate counts are usually small.
  */
 export function shapiroWilkTest(values: number[]): NormalityTestResult {
   const n = values.length
@@ -323,7 +332,7 @@ export function shapiroWilkTest(values: number[]): NormalityTestResult {
   const ssq = sorted.reduce((sum, v) => sum + (v - mean) ** 2, 0)
 
   const nn2 = Math.floor(n / 2)
-  const a: number[] = new Array(nn2 + 1).fill(0) // 1-indexed; a[0] unused
+  const a: number[] = new Array(nn2 + 1).fill(0) // 1-indexed to match AS R94, so a[0] is unused
 
   if (n === 3) {
     a[1] = 0.70710678
@@ -401,8 +410,9 @@ export function shapiroWilkTest(values: number[]): NormalityTestResult {
 }
 
 /**
- * Anderson-Darling test, D'Agostino & Stephens (1986) case 3 (mean and variance unknown,
- * estimated from data). Verified against R's nortest::ad.test source.
+ * Anderson-Darling test, D'Agostino & Stephens (1986) case 3.
+ * Case 3 means mean and variance are unknown and estimated from the data.
+ * Verified against the source of R's nortest::ad.test.
  */
 export function andersonDarlingTest(values: number[]): NormalityTestResult {
   const n = values.length
@@ -447,7 +457,7 @@ export function andersonDarlingTest(values: number[]): NormalityTestResult {
   return { testName: 'anderson-darling', statistic: a2Star, pValue, n, warnings: [] }
 }
 
-/** Dispatcher used everywhere else in the app instead of calling a specific test directly. */
+/** Run the requested normality test. Call this rather than a specific test function. */
 export function runNormalityTest(values: number[], type: NormalityTestType): NormalityTestResult {
   switch (type) {
     case 'shapiro-wilk':

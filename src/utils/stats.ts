@@ -1,3 +1,9 @@
+/*
+ * Descriptive statistics for a numeric array or for one column of a sheet.
+ * Pure functions -- no React, no Zustand. The column readers take cellState, so every statistic
+ * reflects the cleaned overlay rather than the raw rows.
+ * Variance uses the sample denominator (n - 1), matching R's sd() and pandas' default std().
+ */
 import type { CellState, DistributionSummary, RowData } from '../types/data'
 import { makeCellId } from './cellId'
 import { getEffectiveValue, isMissing, toNumber } from './numeric'

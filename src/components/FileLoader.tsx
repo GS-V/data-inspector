@@ -164,6 +164,10 @@ export function FileLoader() {
                 <button
                   className="session-confirm-primary"
                   onClick={() => {
+                    // force skips the filename check the user has just answered here. The store
+                    // then applies the session with set() and never setWorkbook(), because
+                    // setWorkbook() would clear the restored cellState, audit log, undo stack,
+                    // and transform history. See the comment on restoreSession in the store.
                     restoreSession(pendingSession, { force: true })
                     const editCount = Object.keys(pendingSession.cellState).length
                     setSessionStatus({

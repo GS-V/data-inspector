@@ -45,8 +45,8 @@ export type AuditReasonInput = {
 }
 
 type DataInspectorState = {
-  // The parsed file itself -- immutable raw rows/columns. Set once by setWorkbook() on file load;
-  // every downstream action reads it but never edits it directly (edits live in cellState instead).
+  // The parsed file, with immutable raw rows and columns. setWorkbook() sets it once on load.
+  // Every downstream action reads it and none edits it. All edits live in cellState instead.
   workbook?: WorkbookData
   // Which sheet, value column, X-axis column, and chart type the chart panel currently renders.
   activeSheetName: string
@@ -57,32 +57,35 @@ type DataInspectorState = {
   // Cleaning tools, the stats panel, and transforms always operate on selectedColumn regardless of
   // this list. Cleared whenever selectedColumn, the active sheet, or the workbook changes.
   comparisonColumns: string[]
-  // Transient, UI-only cell targeting: selectedCells is the user's manual click/drag selection,
-  // previewCells is whatever a review tool (outlier/duplicate/threshold preview) last suggested.
-  // Neither is persisted -- they're cleared on column/sheet change and never written to the audit log.
+  // Transient, UI-only cell targeting. selectedCells holds the user's own click or drag
+  // selection. previewCells holds whatever a review tool last suggested, such as an outlier,
+  // duplicate, or threshold preview. Neither survives a column or sheet change, and neither
+  // reaches the audit log.
   selectedCells: Record<CellId, true>
-  // True while a large multi-point/multi-row selection (drag-select, shift-click range) is being
-  // committed -- set by the caller around a deferred addSelectedCells call so the "Selected" status
-  // chip can show a brief busy state instead of the UI silently hanging on large selections. Not
-  // used for single-cell click/toggle, which is cheap enough not to need it.
+  // True while a large selection commits, such as a drag-select or a shift-click range. The
+  // caller sets it around a deferred addSelectedCells call, so the "Selected" status chip can
+  // show a brief busy state. Without it, a large selection looks like a silent UI hang.
+  // A single-cell click or toggle skips this. It is cheap enough not to need it.
   isSelecting: boolean
   previewCells: Record<CellId, PreviewCell>
   // The actual overlay of user edits, keyed by cell ID: marks, highlights, and value overrides.
   // This is the one mutable "cleaned" layer sitting on top of the immutable `workbook` rows.
   cellState: Record<CellId, CellState>
-  // Full append-only history of every action taken (owned by applyCellChanges), plus the stack of
-  // action-groups undoLastActionGroup() pops from, one group per user-facing action.
+  // Append-only history of every action taken. applyCellChanges owns both fields.
+  // undoStack holds the action groups undoLastActionGroup() pops, one group per user action.
   auditLog: AuditAction[]
   undoStack: AuditAction[][]
-  // One entry per applied column transform (log/sqrt/box-cox/z-score), feeding the Transform tab's
-  // history panel, its before/after stats, and its Python/R "copy as code" snippets.
+  // One entry per applied column transform: log, sqrt, box-cox, or z-score.
+  // The Transform tab reads it for the history panel, the before/after statistics, and the
+  // Python and R "copy as code" snippets.
   transformHistory: TransformAttempt[]
   // User-selected settings for the Transform tab's "Check normality" button -- which test to run
   // and the significance threshold used to render its pass/fail verdict.
   normalityTestType: NormalityTestType
   normalityThreshold: number
-  // Action panel "Require reason for changes" toggle. Off by default; survives sheet switches
-  // (it's a session-wide preference, not per-sheet state) but is never persisted across reloads.
+  // Action panel "Require reason for changes" toggle, off by default. It survives a sheet
+  // switch, because it is a session-wide preference rather than per-sheet state.
+  // It does not survive a page reload.
   requireReason: boolean
   setWorkbook: (workbook: WorkbookData) => void
   setActiveSheetName: (sheetName: string) => void
@@ -408,8 +411,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
 
     setSelectedColumn: (columnName, options) => {
       if (options?.preserveSelection) {
-        // Used only by TableView's ctrl/cmd-click, which needs to move the active column to
-        // whatever cell was just clicked without wiping cells already selected in other columns.
+        // Only TableView's ctrl/cmd-click uses this. That gesture moves the active column to
+        // the clicked cell. It must not wipe cells already selected in other columns.
         set({ selectedColumn: columnName, comparisonColumns: [] })
       } else {
         set({ selectedColumn: columnName, selectedCells: {}, previewCells: {}, comparisonColumns: [] })
@@ -417,15 +420,15 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     },
 
     setXAxis: (xAxis) => {
-      // A column can't be both the X-axis and a comparison overlay (it would plot as a trivial
-      // diagonal against itself) -- drop it from comparisonColumns if it's already checked there.
+      // One column cannot be both the X-axis and a comparison overlay. It would plot as a
+      // trivial diagonal against itself. Drop it from comparisonColumns when already checked.
       const { comparisonColumns } = get()
       set({ xAxis, comparisonColumns: comparisonColumns.filter((column) => column !== xAxis) })
     },
 
-    // Every chart type either supports the comparison overlay (scatter, histogram, box, violin,
-    // density, cdf, qq) or simply ignores it (table), so switching plot types never needs to
-    // clear comparisonColumns.
+    // Scatter, histogram, box, violin, density, cdf, and qq all support the comparison overlay.
+    // Table ignores it. No plot type mishandles it, so a plot-type change never needs to clear
+    // comparisonColumns.
     setPlotType: (plotType) => set({ plotType }),
 
     addComparisonColumn: (columnName) => {
@@ -729,9 +732,10 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         return { appliedCount: 0, skippedCount: 0 }
       }
 
-      // Neighbor/mean/median values are all computed once up front from this snapshot, then
-      // applied to every target cell -- mirrors applyColumnTransform's beforeValues/mean/sd
-      // pattern so a batch of fills within one action never chains off each other's new values.
+      // Compute every fill value once, up front, from this one snapshot of the column. Then
+      // apply the results to all target cells. This mirrors how applyColumnTransform derives
+      // beforeValues, mean, and sd. Without it, each fill in a batch would read the values the
+      // earlier fills just wrote, and the results would chain off each other.
       const visibleEntries = getVisibleColumnValues(sheet, columnName, state.cellState)
       if (visibleEntries.length === 0) {
         return { appliedCount: 0, skippedCount: missingRowIndexes.length }
@@ -826,6 +830,11 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       return runNormalityTest(values, state.normalityTestType)
     },
 
+    // Revert the most recent action group, then record the reversal as new 'undo' entries in the
+    // audit log. The audit log stays append-only, so nothing is ever erased from it.
+    // This function does not touch transformHistory. An undone transform therefore keeps its
+    // history entry. detectActiveTransforms in generateScript.ts filters those stale entries
+    // out instead, by matching them against undoStack.
     undoLastActionGroup: () => {
       const state = get()
       const lastGroup = state.undoStack.at(-1)
@@ -911,6 +920,13 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
       exportSession(session)
     },
 
+    // Apply a saved session over the file already loaded.
+    // Call set() directly here and never setWorkbook(), because setWorkbook() resets cellState,
+    // auditLog, undoStack, and transformHistory to empty. That would discard the very state being
+    // restored. The raw workbook rows are untouched either way, since a session file carries only
+    // the overlay and the UI preferences.
+    // Without options.force, a filename mismatch returns a warning and changes nothing, leaving
+    // the caller to confirm with the user first.
     restoreSession: (session, options) => {
       const state = get()
       if (!state.workbook) return { warnings: [] }

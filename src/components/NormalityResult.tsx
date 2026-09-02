@@ -1,6 +1,7 @@
-/* eslint-disable react-refresh/only-export-components -- shared formatting helpers co-located
-   with the small NormalitySide component that renders them, reused by both TransformHistoryPanel
-   and the standalone "Check normality" action; none hold state, so there's no HMR concern. */
+/* eslint-disable react-refresh/only-export-components -- these formatting helpers sit beside the
+   small NormalitySide component that renders them. TransformHistoryPanel and the standalone
+   "Check normality" action both reuse the pair. None of the helpers holds state, so splitting
+   them into a second module would buy nothing and fast refresh has nothing to lose here. */
 import type { NormalityTestResult, NormalityTestType } from '../types/data'
 import { NORMALITY_TEST_OPTIONS } from '../types/data'
 

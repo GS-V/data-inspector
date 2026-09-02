@@ -1,3 +1,9 @@
+/*
+ * Value coercion and column classification shared by every reader of sheet data.
+ * Pure functions -- no React, no Zustand, no browser APIs.
+ * getEffectiveValue is the only place that resolves a raw cell against its overlay. Always read a
+ * cell through it. Reading straight from the row silently ignores every user edit.
+ */
 import type { CellState, RawCellValue, RowData } from '../types/data'
 
 export function isMissing(value: RawCellValue): boolean {
@@ -46,10 +52,11 @@ export function getDisplayValue(value: RawCellValue): string {
 }
 
 /**
- * A column counts as numeric if at least `minimumNumericRatio` (default 50%) of its
- * non-empty values parse as numbers — a threshold rather than "all values," so a handful
- * of stray text entries (typos, "N/A") don't disqualify an otherwise numeric column.
- * A column with zero non-empty values is treated as not numeric rather than dividing by zero.
+ * Return the columns that count as numeric.
+ * A column qualifies when at least `minimumNumericRatio` of its non-empty values parse as
+ * numbers. The default is 50%. Use a ratio rather than "every value". A few stray text entries,
+ * such as a typo or an "N/A", then do not disqualify an otherwise numeric column.
+ * Treat a column with no non-empty values as not numeric, rather than dividing by zero.
  */
 export function findNumericColumns(
   rows: RowData[],
@@ -80,15 +87,15 @@ export function findNumericColumns(
   })
 }
 
-
 export function isDateCol(col: string, rows: RowData[]): boolean {
   return rows.some((row) => row[col] instanceof Date)
 }
 
 /**
- * Numeric columns suitable for being a plotted VALUE (Y-axis, comparison overlay) -- numeric
- * per findNumericColumns, with date columns excluded. A date is an axis dimension, not a value:
- * toNumber() converts it to a valid epoch-ms number, so it would otherwise pass the numeric check.
+ * Return the columns usable as a plotted value, meaning a Y-axis or a comparison overlay.
+ * These are the findNumericColumns results with every date column removed. A date is an axis
+ * dimension, not a value. Exclude dates explicitly, because toNumber() turns a date into a valid
+ * epoch-millisecond number, so a date column would otherwise pass the numeric check.
  */
 export function findValueColumns(rows: RowData[], columns: string[]): string[] {
   return findNumericColumns(rows, columns).filter((column) => !isDateCol(column, rows))
@@ -99,8 +106,8 @@ export function findIdentifierColumns(
   columns: string[],
 ): string[] {
   const numericSet = new Set(findNumericColumns(rows, columns))
-  // Date columns are classified as numeric by toNumber() (returns timestamp ms),
-  // but they are human-readable identifiers — include them regardless.
+  // toNumber() turns a date into epoch milliseconds, so findNumericColumns counts date columns
+  // as numeric. Add them back anyway. A date reads as a human-readable identifier.
   return columns.filter((col) => !numericSet.has(col) || isDateCol(col, rows)).slice(0, 3)
 }
 

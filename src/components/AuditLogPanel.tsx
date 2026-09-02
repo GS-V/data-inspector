@@ -94,15 +94,16 @@ function matchesSearch(action: AuditAction, query: string): boolean {
 }
 
 /**
- * Read-only view of the session's change history: session totals, a search box, and one
- * expandable group per (sheet, column) showing every action recorded against it.
+ * Show a read-only view of the session's change history.
+ * The panel holds session totals, a search box, and one expandable group per sheet and column
+ * pair. Each group lists every action recorded against that column.
  *
- * Reads only `auditLog` from the store -- it does not read or render `cellState`, `workbook`,
- * or any other slice, and it never calls a store action. Exporting and QC-report generation are
- * handled entirely by the parent via the `onExport`/`onGenerateReport` callbacks; this component
- * does not build files or mutate data itself. `isExporting` mirrors the parent's own export-busy
- * state so this panel's "Export CSV" button (a second entry point to the same export the parent's
- * own Export buttons trigger) shows the same disabled/spinner treatment.
+ * This panel reads `auditLog` and nothing else from the store. It never reads `cellState` or
+ * `workbook`, and it never calls a store action, so it cannot change data.
+ * The parent owns exporting and QC-report generation through the `onExport` and
+ * `onGenerateReport` callbacks. This component builds no files itself.
+ * `isExporting` mirrors the parent's export-busy state. The "Export CSV" button here triggers
+ * the same export as the parent's own button, so both must show the same busy treatment.
  */
 export function AuditLogPanel({
   onExport,

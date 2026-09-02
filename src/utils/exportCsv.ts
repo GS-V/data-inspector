@@ -225,10 +225,14 @@ export async function downloadHighlightedXlsxWorkbook(
 }
 
 export function buildAuditLogCsv(auditLog: AuditAction[]): string {
-  // Column order follows a reading narrative rather than the AuditAction field order:
-  // when (Timestamp) -> what happened (Action/Action Detail) -> where (Column/Sheet/Row) ->
-  // what changed (Old/New Value) -> why (Reason Category/Note) -> how (Method/Method Context) ->
-  // Group ID last, since it's an internal correlation key rather than something a reviewer reads first.
+  // Column order follows a reviewer's reading order, not the AuditAction field order:
+  //   when          -> Timestamp
+  //   what happened -> Action, Action Detail
+  //   where         -> Column, Sheet, Row / Identity, Row #
+  //   what changed  -> Old Value, New Value
+  //   why           -> Reason Category, Reason Note
+  //   how           -> Method, Method Context
+  // Group ID comes last. It is an internal correlation key, not something a reviewer reads first.
   const columns = [
     'Timestamp',
     'Action',
@@ -345,9 +349,10 @@ export function buildQcReportCsv(report: QcReport): string {
 }
 
 export function downloadCsv(fileName: string, csv: string) {
-  // The leading string below is a UTF-8 byte-order mark (U+FEFF). Without it, Excel on Windows
-  // opens a CSV as Windows-1252 by default, garbling any multi-byte character -- e.g. the "·"
-  // separator buildRowIdentifier() uses to join identifier column values in the audit log.
+  // The leading string below is a UTF-8 byte-order mark (U+FEFF). Keep it.
+  // Without it, Excel on Windows opens a CSV as Windows-1252 and garbles every multi-byte
+  // character. One such character is the "·" that buildRowIdentifier() puts between identifier
+  // column values in the audit log.
   const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' })
   downloadBlob(fileName, blob)
 }

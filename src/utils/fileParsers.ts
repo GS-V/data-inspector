@@ -1,3 +1,9 @@
+/*
+ * Parse a local CSV or XLSX file into the WorkbookData shape the store expects.
+ * The file never leaves the browser. PapaParse and SheetJS both read the local File object.
+ * Column names are made unique and non-empty here, because every cell key depends on a stable
+ * column name for the whole session.
+ */
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { findIdentifierColumns } from './numeric'

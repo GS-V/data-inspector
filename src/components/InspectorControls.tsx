@@ -33,9 +33,9 @@ export function InspectorControls() {
   const toggleRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // The dropdown is portaled to document.body and positioned via fixed coordinates -- rendering
-  // it in place would have it clipped by the sidebar's overflow-y: auto as soon as it grows past
-  // the visible scroll area.
+  // The dropdown is portaled to document.body and positioned with fixed coordinates.
+  // Rendered in place, the sidebar's own overflow-y: auto would clip it as soon as it grew
+  // past the visible scroll area.
   useEffect(() => {
     if (!isCompareOpen || !toggleRef.current) {
       return
@@ -73,8 +73,8 @@ export function InspectorControls() {
   }, [isCompareOpen])
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
-  // X-axis accepts any column (date, numeric, or string/categorical) -- Plotly treats a string
-  // column as categorical ticks automatically, no special handling needed.
+  // The X-axis accepts any column: date, numeric, or string. Plotly renders a string column as
+  // categorical ticks on its own, so no special handling is needed here.
   const allColumns = sheet?.columns ?? []
   const valueColumns = findValueColumns(sheet?.rows ?? [], sheet?.columns ?? [])
   const sheetOptions = workbook?.sheets ?? []

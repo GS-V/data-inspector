@@ -1,3 +1,8 @@
+/*
+ * Classify a chosen file into a load-risk tier before any parsing starts.
+ * Pure functions -- no React, no Zustand, no file reads. Only the name, size, and type are used.
+ * The tier decides whether the loader proceeds, asks the user to confirm, or refuses the file.
+ */
 export type FileKind = 'csv' | 'xlsx' | 'unsupported'
 
 export type FileRiskTier = 'safe' | 'warning' | 'high-risk' | 'reject'
@@ -22,8 +27,22 @@ export type FileRiskInput = {
 const MB = 1024 * 1024
 const GB = 1024 * MB
 
+// Every threshold exists because parsing runs in the browser tab, on the main thread, with the
+// whole file held in memory. A parser expands a file well past its size on disk, so the tab can
+// exhaust its heap and crash. A 32-bit or low-memory device runs out far sooner than a desktop,
+// which is what lowMemoryThresholdMultiplier accounts for.
+//
+// Tier boundaries per file kind, measured against the size on disk:
+//   up to safeBytes      -> safe, load with no prompt
+//   up to warningBytes   -> warning, load is slow, ask the user to confirm
+//   up to highRiskBytes  -> high risk, the tab may freeze or fail, ask the user to confirm
+//   above highRiskBytes  -> reject, refuse before any parsing starts
+// absoluteRejectBytes (1 GB) rejects a file of any kind, whatever the adjusted per-kind limits
+// work out to. XLSX limits sit far below the CSV ones because XLSX arrives compressed: it
+// inflates to several times its stored size, then again into cell objects.
 export const FILE_RISK_LIMITS = {
   absoluteRejectBytes: GB,
+  // Applied to all three per-kind thresholds on a device reporting 4 GB of memory or less.
   lowMemoryThresholdMultiplier: 0.75,
   csv: {
     safeBytes: 50 * MB,

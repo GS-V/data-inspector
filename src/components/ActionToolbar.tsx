@@ -302,9 +302,9 @@ export function ActionToolbar() {
     return 'Matching values in the active sheet and selected column will be blanked in the cleaned export. Rows are not deleted.'
   }
 
-  // Shared by the reason-modal confirm path and the "Require reason" OFF immediate-apply path --
-  // reason is omitted entirely (rather than passed as empty strings) for the immediate path, so
-  // the audit log records these fields as blank exactly like any other reason-less store call.
+  // Both the reason-modal confirm path and the immediate-apply path call this.
+  // The immediate path omits `reason` entirely rather than passing empty strings. The audit log
+  // then records those fields as blank, exactly as any other store call without a reason does.
   function applyCleaningAction(action: PendingCleaningAction, reason?: AuditReasonInput) {
     if (action.kind === 'replace') {
       replaceSelectedTargets(action.value, reason)
@@ -336,9 +336,9 @@ export function ActionToolbar() {
     }
   }
 
-  // Entry point for every data-modifying cleaning action (replace, blank, and fill/impute):
-  // applies immediately (no prompt, reason left blank) when "Require reason" is off, otherwise
-  // opens the reason modal.
+  // Entry point for every data-modifying cleaning action: replace, blank, and fill.
+  // With "Require reason" off, apply at once and leave the reason blank.
+  // With it on, open the reason modal and let confirmReasonPrompt apply the action.
   function runCleaningAction(action: PendingCleaningAction) {
     if (!requireReason) {
       if (actionBusy) {

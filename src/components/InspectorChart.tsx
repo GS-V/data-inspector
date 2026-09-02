@@ -55,12 +55,12 @@ function markColor(state: CellState | undefined, isBlanked: boolean): string {
   return '#3b82f6'
 }
 
-// Resolves a non-row-order X-axis cell to what Plotly should plot it as. A date axis always needs
-// the epoch-ms number (paired with layout.xaxis.type: 'date'). Anything else that parses as a
-// number stays numeric. A genuine string/categorical value (e.g. "V1") is passed through as-is --
-// running it through toNumber() would return null and silently drop the row, which is exactly the
-// "X-axis = a string column produces an empty chart" bug this fixes. Plotly renders a string axis
-// as categorical ticks automatically.
+// Resolve a non-row-order X-axis cell into the value Plotly should plot.
+// A date axis needs the epoch-millisecond number, paired with layout.xaxis.type: 'date'.
+// Anything else that parses as a number stays numeric.
+// Pass a genuine string value such as "V1" straight through. toNumber() returns null for it,
+// which would silently drop the row and leave a string X-axis column rendering an empty chart.
+// Plotly renders a string axis as categorical ticks on its own.
 function resolveAxisValue(effectiveValue: RawCellValue, isDateAxis: boolean): number | string | null {
   if (isDateAxis) {
     return toNumber(effectiveValue)
@@ -135,17 +135,16 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   const [chartAreaHeight, setChartAreaHeight] = useState<number | null>(null)
   const [chartAreaWidth, setChartAreaWidth] = useState<number | null>(null)
   const chartAreaObserverRef = useRef<ResizeObserver | null>(null)
-  // The DOM node Plotly itself manages for whichever chart type is currently rendered --
-  // <Plot ref={...}> below is forwardRef-wrapped straight through to it. Shared across every
-  // branch's <Plot> since only one is ever mounted at a time, this is what Plotly.downloadImage
-  // operates on for the export feature.
+  // The DOM node Plotly manages for whichever chart type is rendered. Every <Plot ref={...}>
+  // below forwards its ref straight to it. One ref serves every branch, because exactly one
+  // <Plot> is ever mounted. Plotly.downloadImage needs this node to export the chart.
   const graphDivRef = useRef<HTMLDivElement | null>(null)
 
-  // Plotly's own autosize/useResizeHandler only remeasures on window resize, which leaves a stale
-  // fallback height until the next such event (e.g. on first paint, or if the surrounding CSS grid
-  // settles for some other reason). A ResizeObserver on the actual plot area keeps chartAreaHeight
-  // -- and thus every chart's explicit layout.height below -- correct immediately. chartAreaWidth
-  // rides along on the same observer, used only for the export popover's "Current" size preset.
+  // Plotly's autosize and useResizeHandler remeasure only on a window resize. The fallback
+  // height therefore stays stale until one happens, which shows on first paint and whenever the
+  // surrounding CSS grid settles for any other reason. A ResizeObserver on the plot area keeps
+  // chartAreaHeight correct at once, and every chart's explicit layout.height reads it.
+  // chartAreaWidth rides the same observer. Only the export popover's "Current" preset uses it.
   const chartAreaRef = useCallback((node: HTMLDivElement | null) => {
     chartAreaObserverRef.current?.disconnect()
     chartAreaObserverRef.current = null
@@ -183,12 +182,12 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     setIsSelecting,
   } = useDataInspectorStore()
 
-  // Whether to connect each scatter series with lines -- a transient view preference (not
-  // session data, so it lives in local state, not the store) that only makes sense on the
-  // scatter view. Reset whenever the user navigates to any other plot type, using React's
-  // "adjust state during render" pattern (see react.dev/learn/you-might-not-need-an-effect)
-  // rather than an effect, since resetting from inside a useEffect would itself trigger a
-  // second, avoidable render.
+  // Whether to connect each scatter series with lines. This is a transient view preference,
+  // not session data, so it lives in local state rather than the store. It means nothing outside
+  // the scatter view, so any other plot type resets it.
+  // The reset uses React's "adjust state during render" pattern, documented at
+  // react.dev/learn/you-might-not-need-an-effect. Resetting inside a useEffect would instead
+  // trigger a second, avoidable render.
   const [scatterLinesMode, setScatterLinesMode] = useState(false)
   // Chart export popover -- also transient view state, not session data.
   const [isExportOpen, setIsExportOpen] = useState(false)
@@ -203,19 +202,19 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     if (plotType !== 'scatter') {
       setScatterLinesMode(false)
     }
-    // The export button (and its popover) only exists inside the chart header, which isn't
-    // rendered at all for Table -- close it on any plot-type change so it can't be left open
-    // and then silently reappear (still "open" in state) after switching back from Table.
+    // The export button and its popover live in the chart header, which Table never renders.
+    // Close the popover on every plot-type change. Otherwise it stays open in state while
+    // invisible, then silently reappears on the way back from Table.
     setIsExportOpen(false)
     setExportError(null)
   }
-  // Also gate directly on plotType (not just scatterLinesMode) as cheap defense-in-depth --
-  // scatterLinesMode is only ever meaningful while actually on the scatter view.
+  // Gate on plotType as well as scatterLinesMode, as cheap defense in depth.
+  // scatterLinesMode means something only while the scatter view is actually showing.
   const linesEnabled = plotType === 'scatter' && scatterLinesMode
 
-  // Portaled to document.body and positioned via fixed coordinates, same reasoning as the
-  // sidebar's "Compare columns" dropdown -- rendered in place, it would clip against
-  // .chart-panel's own overflow: hidden as soon as it grew past the panel's edge.
+  // Portaled to document.body and positioned with fixed coordinates, for the same reason as the
+  // sidebar's "Compare columns" dropdown. Rendered in place, .chart-panel's own overflow: hidden
+  // would clip it as soon as it grew past the panel edge.
   const [exportPanelPosition, setExportPanelPosition] = useState<{ top: number; right: number } | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement>(null)
   const exportPanelRef = useRef<HTMLDivElement>(null)
@@ -258,12 +257,12 @@ export function InspectorChart({ theme }: InspectorChartProps) {
 
   const sheet = workbook?.sheets.find((item) => item.name === activeSheetName)
 
-  // Defers the (potentially heavy) chart computation below by one tick whenever the user picks
-  // a different sheet/column/axis/plot type, so a brief "Rendering chart..." state can paint
-  // before the main thread blocks on it. Deliberately keyed on these four inputs only -- not
-  // cellState -- so routine mark/blank/transform actions elsewhere keep updating this chart in
-  // place with no spinner, since that's ordinary reactive re-rendering, not a new computation
-  // the user asked for.
+  // Defer the potentially heavy chart computation below by one tick whenever the user picks a
+  // different sheet, column, axis, or plot type. A brief "Rendering chart..." state then paints
+  // before the main thread blocks.
+  // The key deliberately omits cellState. A mark, blank, or transform elsewhere therefore
+  // updates this chart in place, with no spinner. Such an edit is ordinary reactive
+  // re-rendering, not a new computation the user asked for.
   const chartRenderKey = `${activeSheetName}::${selectedColumn}::${xAxis}::${plotType}`
   const [renderedChartKey, setRenderedChartKey] = useState<string | null>(null)
   const isComputingChart = Boolean(sheet && selectedColumn) && renderedChartKey !== chartRenderKey
@@ -682,8 +681,8 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   if (plotType === 'histogram') {
     const values = getVisibleColumnValues(sheet, selectedColumn, cellState).map((entry) => entry.value)
     // The comparison picker already excludes date columns, and the store's addComparisonColumn
-    // rejects them too -- this filter is a defensive backstop against a date column ever reaching
-    // the trace builder.
+    // rejects them as well. This filter is a defensive backstop only. It keeps a date column
+    // from ever reaching the trace builder.
     const validComparisonColumns = comparisonColumns.filter((column) => !isDateCol(column, sheet.rows))
     const hasComparisons = validComparisonColumns.length > 0
     const comparisonHistograms = validComparisonColumns.map((column, index) => ({
@@ -876,8 +875,8 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     // Defensive backstop -- see the matching comment in the histogram branch above.
     const validComparisonColumns = comparisonColumns.filter((column) => !isDateCol(column, sheet.rows))
     const hasComparisons = validComparisonColumns.length > 0
-    // Each curve is computed independently over its own column's values, so each integrates to 1
-    // on its own -- they aren't forced onto a shared grid, they just share the same Plotly axes.
+    // Each curve is computed over its own column's values alone, so each integrates to 1 by
+    // itself. The curves share only the Plotly axes, never a common grid.
     const comparisonDensities = validComparisonColumns.map((column, index) => {
       const columnValues = getVisibleColumnValues(sheet, column, cellState).map((entry) => entry.value)
       const columnPoints = computeDensityPoints(columnValues)
@@ -1113,9 +1112,10 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     const validComparisonColumns = comparisonColumns.filter((column) => !isDateCol(column, sheet.rows))
     const hasComparisons = validComparisonColumns.length > 0
     // Each comparison column gets its own quantile-quantile series against the same theoretical
-    // quantiles -- computed independently (its own N, its own sample quantiles), not selectable
-    // (no cellId/click wiring), matching how every other chart type's comparison traces work. Only
-    // one reference line is drawn (above, from the primary column) -- it is not duplicated here.
+    // quantiles, computed from its own N and its own sample quantiles. These series carry no
+    // cellId and no click wiring, so they are not selectable. Every other chart type's
+    // comparison traces behave the same way.
+    // The single reference line comes from the primary column above. Do not duplicate it here.
     const comparisonQqTraces = validComparisonColumns.map((column, index) => {
       const entries = getVisibleColumnValues(sheet, column, cellState)
       const columnQqEntries = computeQQPlotPoints(entries)
@@ -1143,9 +1143,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     })
   }
 
-  // Row order and Date share an ordered X-axis; any other column -- numeric or string/categorical
-  // -- has no inherent order, so a sort is only meaningful for the Date case (see below). Whether
-  // a series renders with connecting lines is now entirely the "Lines" toggle's call (linesEnabled).
+  // Row order and a Date column both give an ordered X-axis. Any other column, numeric or
+  // string, has no inherent order, so only the Date case makes a sort meaningful. See below.
+  // The "Lines" toggle alone decides whether a series renders connecting lines.
   const isRowOrderXAxis = xAxis === ROW_ORDER_AXIS
   const isDateXAxis = !isRowOrderXAxis && isDateCol(xAxis, sheet.rows)
 
@@ -1203,12 +1203,12 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     })
     .filter((point): point is NonNullable<typeof point> => point !== null)
 
-  // Comparison overlay now applies across every X-axis mode:
-  //  - Row order or a Date column: each comparison column is drawn as its own line, sharing the
-  //    primary trace's X positions -- this is the time-series-over-dates use case.
-  //  - Any other column, numeric or string/categorical (a genuine X-Y correlation scatter): each
-  //    comparison column is drawn as its own point series against that same X column, since
-  //    there's no meaningful "line order" along an arbitrary or categorical axis.
+  // The comparison overlay applies across every X-axis mode:
+  //  - Row order or a Date column: draw each comparison column as its own line, sharing the
+  //    primary trace's X positions. This covers the time-series-over-dates case.
+  //  - Any other column, numeric or string: draw each comparison column as its own point series
+  //    against that same X column. This is a genuine X-Y correlation scatter, and an arbitrary
+  //    or categorical axis carries no meaningful line order.
   const overlayApplies = comparisonColumns.length > 0
 
   const comparisonTraces = overlayApplies
@@ -1237,16 +1237,16 @@ export function InspectorChart({ theme }: InspectorChartProps) {
           seriesPoints.push({ x: xValue, y: yValue })
         })
 
-        // Sorting only matters for a connected line -- row order is already in order, and a
-        // numeric/categorical axis renders unconnected markers where order is irrelevant (and,
-        // for a categorical string axis, a numeric a-b subtraction would be NaN anyway).
+        // Only a connected line needs sorted points. Row order already arrives sorted, and a
+        // numeric or categorical axis renders unconnected markers where order does not matter.
+        // A categorical string axis would also make the a-b subtraction below return NaN.
         if (isDateXAxis) {
           seriesPoints.sort((a, b) => (a.x as number) - (b.x as number))
         }
 
-        // Whether these render as lines is now purely the "Lines" toggle's call, uniformly
-        // across every X-axis mode -- no more auto-detecting it from row-order/date vs. other.
-        // Exclusive, not additive -- see the matching comment on the primary trace above.
+        // The "Lines" toggle alone decides whether these render as lines, the same way in every
+        // X-axis mode. Never infer it from the axis kind.
+        // The mode is exclusive, not additive. See the matching comment on the primary trace.
         return {
           type: linesEnabled ? ('scatter' as const) : ('scattergl' as const),
           mode: linesEnabled ? ('lines' as const) : ('markers' as const),

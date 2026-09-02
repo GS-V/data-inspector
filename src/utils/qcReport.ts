@@ -13,10 +13,9 @@ import { makeCellId, parseCellId } from './cellId'
 import { getColumnNumbers, summarizeNumbers } from './stats'
 import { calculateSkewness, runNormalityTest } from './transforms'
 
-// Matches the store's normalityTestType/normalityThreshold defaults (useDataInspectorStore.ts) --
-// the QC report always reports against this fixed default rather than whatever test the user
-// currently has selected in the Transform tools, so the report's verdicts stay reproducible
-// independent of in-session UI state.
+// These match the store's normalityTestType and normalityThreshold defaults. The QC report
+// always uses this fixed pair, never whichever test the user has selected in the Transform
+// tools. Its verdicts therefore stay reproducible, independent of in-session UI state.
 const QC_NORMALITY_TEST_TYPE: NormalityTestType = 'shapiro-wilk'
 const QC_NORMALITY_THRESHOLD = 0.05
 
@@ -37,8 +36,9 @@ export type QcColumnStat = {
   after: DistributionSummary
   skewnessBefore: number | null
   skewnessAfter: number | null
-  // null means "not run" (column has no transform history), distinct from a NormalityTestResult
-  // whose own statistic/pValue are null because the sample was too small for the test.
+  // null means the test never ran, because the column has no transform history. That differs
+  // from a NormalityTestResult whose own statistic and pValue are null. Those are null when the
+  // sample was too small for the test to produce a result.
   normalityBefore: NormalityTestResult | null
   normalityAfter: NormalityTestResult | null
 }
@@ -47,7 +47,7 @@ export type QcSheetSummary = {
   sheetName: string
   totalRows: number
   affectedRows: number
-  keptRowRatio: number // 0..1; NaN-safe (0 rows -> 1)
+  keptRowRatio: number // 0 to 1. A sheet with no rows reports 1, so the ratio is never NaN.
 }
 
 export type QcReport = {
@@ -64,15 +64,15 @@ export type QcReport = {
 }
 
 /**
- * For cells whose current CellState has a non-null valueOverride but no `mark` (this is the
- * exact footprint left by BOTH a manual "Replace selected with new value" action AND any
- * transform — CellState alone cannot tell them apart), reconstruct which action type is
- * actually responsible for the cell's current value.
+ * Return the action type responsible for each ambiguous cell's current value.
+ * A cell is ambiguous when its CellState holds a non-null valueOverride and no `mark`. Both a
+ * manual "Replace selected with new value" and any transform leave exactly that footprint, so
+ * CellState alone cannot tell the two apart. Only the audit log can.
  *
- * Walks the append-only audit log once, maintaining a per-cell stack of applied (non-undo)
- * action types and popping on 'undo'. This mirrors the store's real undo semantics exactly:
- * undoLastActionGroup only ever reverts the most recently applied group, one action per cell
- * per group, so a LIFO stack per cellId is the correct model of "what's currently in effect."
+ * Walk the append-only audit log once. Keep a per-cell stack of applied action types, push every
+ * non-undo action, and pop on 'undo'. That mirrors the store's undo semantics exactly.
+ * undoLastActionGroup reverts only the most recently applied group, and a group holds at most one
+ * action per cell. A LIFO stack per cellId is therefore the correct model of what is in effect.
  */
 export function resolveAmbiguousProvenance(
   targetCellIds: Set<string>,
@@ -186,14 +186,14 @@ function buildColumnStats(
       const afterNumbers = getColumnNumbers(sheet.rows, sheet.name, columnName, cellState)
       const before = summarizeNumbers(beforeNumbers.values, beforeNumbers.missingCount)
       const after = summarizeNumbers(afterNumbers.values, afterNumbers.missingCount)
-      // Skip columns with no numeric values at all (e.g. pure text/identifier columns) --
-      // a before/after row of all dashes is noise, not information.
+      // Skip columns holding no numeric values, such as a pure text or identifier column.
+      // A before/after row of nothing but dashes is noise, not information.
       if (before.count === 0 && after.count === 0) {
         return null
       }
 
-      // Only run normality tests on columns the user actually transformed -- running it on
-      // every numeric column in a large sheet would be surprising, uninvited computation.
+      // Test normality only on columns the user actually transformed. Running it on every
+      // numeric column of a large sheet would be slow, uninvited computation.
       const hasTransform = transformedColumnKeys.has(`${sheet.name}::${columnName}`)
 
       return {

@@ -32,9 +32,9 @@ function App() {
     localStorage.setItem('data-inspector-theme', theme)
   }, [theme])
 
-  // Global Cmd/Ctrl+Z (undo) and Cmd/Ctrl+Shift+Z (redo) -- same undoLastActionGroup the "Undo
-  // last action" button calls. Redo has no store-side stack yet, so it's stubbed with a
-  // console.warn rather than either silently swallowing the shortcut or leaving it unbound.
+  // Cmd/Ctrl+Z calls the same undoLastActionGroup the "Undo last action" button calls.
+  // The store has no redo stack yet. Cmd/Ctrl+Shift+Z therefore logs a warning, so the
+  // shortcut is neither silently swallowed nor left unbound.
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
@@ -42,8 +42,8 @@ function App() {
         return
       }
 
-      // Let native undo/redo run inside text fields (the New Value input, the reason note, etc.)
-      // instead of hijacking it for the app-level action history.
+      // Let text fields keep native undo/redo (the New Value input, the reason note).
+      // Hijacking it there would cost the user their in-progress typing.
       const tag = event.target instanceof HTMLElement ? event.target.tagName : ''
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
         return
@@ -120,19 +120,28 @@ function App() {
               <ol>
                 <li>Load a CSV or Excel file.</li>
                 <li>Choose a sheet and value column.</li>
-                <li>Preview values that may need review.</li>
-                <li>Select points or rows.</li>
-                <li>Highlight, blank, or replace values.</li>
-                <li>Transform a column and check its normality, if needed.</li>
-                <li>Add a reason when changing data.</li>
-                <li>Export cleaned data, the audit log, or a QC report summarizing what changed.</li>
+                <li>Preview values that need review using the detection tools.</li>
+                <li>Select cells in the table or chart.</li>
+                <li>Highlight, blank, replace, or fill selected values.</li>
+                <li>Apply a column transform and check normality, if needed.</li>
+                <li>Enable "Require reason" to record a note with each change.</li>
+                <li>Generate a Python or R script that reproduces your cleaned data.</li>
+                <li>Export cleaned data, the audit log, or a QC report.</li>
+                <li>Save your session to a file and restore it later.</li>
               </ol>
               <p className="guidance-subsection">
                 <strong>Compare columns</strong>
-                Select additional numeric columns to overlay on the same chart. Each column is plotted in a
-                distinct color with a legend. Comparison columns are for visualization only — all cleaning,
-                transform, and statistics tools continue to operate on the primary selected column. Not
-                available in Density, CDF, Q-Q, or Table view.
+                Select additional numeric columns to overlay on the same chart.
+                Each column uses a distinct colour with a legend entry.
+                Comparison columns are for visualisation only — all cleaning,
+                transform, and statistics tools operate on the primary column.
+                Not available in Density, CDF, Q-Q, or Table view.
+              </p>
+              <p className="guidance-subsection">
+                <strong>Code generation</strong>
+                Click "Generate code" in the Export section to produce a Python
+                or R script. The script reproduces the final cleaned state.
+                Undone actions are excluded automatically.
               </p>
             </details>
           </section>
@@ -145,7 +154,6 @@ function App() {
                 <li>Files stay in your browser. Nothing is uploaded.</li>
                 <li>Large files may be rejected for browser safety.</li>
                 <li>Export your cleaned file, audit log, or QC report before closing.</li>
-                <li>This is an early testing version.</li>
               </ul>
             </details>
           </section>

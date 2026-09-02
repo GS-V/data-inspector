@@ -114,9 +114,9 @@ export function InspectionTools() {
     ? 'All values are identical; z-score is undefined.'
     : 'Standardizes values using (x - mean) / standard deviation. Values must be numeric.'
 
-  // Live-reflects whatever is currently typed in the Base field, independent of the last
-  // applied base -- the card title tracks this so it updates as the user types, but Apply
-  // (below) re-validates before it ever fires a transform.
+  // These track whatever the Base field currently holds, not the last base applied.
+  // The card title reads them, so it updates as the user types. Apply re-validates the base
+  // before firing a transform, so a half-typed base can never reach applyColumnTransform.
   const parsedLogBase = Number(logBaseInput)
   const logBaseIsValid = Number.isFinite(parsedLogBase) && parsedLogBase > 1
   const logBaseTitleValue = Number.isFinite(parsedLogBase) ? parsedLogBase : 10
@@ -270,10 +270,11 @@ export function InspectionTools() {
     }, 0)
   }
 
-  // Shared wrapper for every preview-building button below (each scans the whole column, an
-  // O(rows) pass that's cheap for typical files but noticeable on a large one). Toggling an
-  // already-active preview back off is handled inside buildPreview and is instant either way,
-  // so deferring it too is harmless -- one extra render tick, not a behavior change.
+  // Shared wrapper for every preview-building button below. Each one scans the whole column,
+  // an O(rows) pass that is cheap for a typical file and slow for a large one. Defer the scan by
+  // one tick so the button's spinner can paint first.
+  // buildPreview also handles toggling an active preview back off, which is instant. Deferring
+  // that case too costs one extra render tick and changes no behavior.
   function runPreviewAction(key: 'outlier' | 'duplicate' | 'zscore' | 'threshold', action: () => void) {
     if (previewBusyKey) {
       return
@@ -827,15 +828,13 @@ export function InspectionTools() {
               )
             })()}
             {/*
-              Log and Z-score used to share one "Normalize" card with a None/Log/Z-score mode
-              switcher. That control was replaced with two independent cards -- matching how
-              Square Root and Box-Cox already work -- because a shared mode switcher made it
-              easy to fire a transform (or open its confirmation dialog) from an interaction
-              that was only meant to change which mode is selected. Each card below is now
-              self-contained: it never fires a transform except from its own Apply click, so
-              editing the Base field or tabbing through the form can't trigger anything.
-              They're wrapped together so Z-score always renders directly under Log regardless
-              of how many cards fit per row in the grid.
+              Log and Z-score get one independent card each, matching Square Root and Box-Cox.
+              A single shared card with a None/Log/Z-score mode switcher replaced these earlier,
+              and it made a transform too easy to fire by accident: an interaction meant only to
+              change the selected mode could apply a transform or open its confirmation dialog.
+              Keep each card self-contained. A card must fire a transform only from its own Apply
+              click, so editing the Base field or tabbing through the form applies nothing.
+              The wrapper keeps Z-score directly under Log, whatever the grid fits per row.
             */}
             <div className="xform-card-pair">
               <div className="xform-card xform-card-normalize" aria-label="Log (base N)">

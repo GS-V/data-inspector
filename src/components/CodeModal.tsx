@@ -10,6 +10,13 @@ type CodeModalProps = {
   onClose: () => void
 }
 
+/**
+ * Show the generated Python and R scripts, with copy and download actions.
+ * Both scripts arrive as finished strings. ActionToolbar renders this component only while the
+ * modal is open, so it calls the generators exactly once per open. Generating them inside this
+ * component would instead re-run both over the whole session state on every tab switch, copy,
+ * and download click.
+ */
 export function CodeModal({ pythonScript, rScript, fileName, onClose }: CodeModalProps) {
   const [lang, setLang] = useState<'python' | 'r'>('python')
   const [copied, setCopied] = useState(false)

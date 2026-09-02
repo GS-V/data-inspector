@@ -1,3 +1,9 @@
+/*
+ * Map an audit action type to the icon name and the label the UI shows for it.
+ * Pure functions -- no React, no Zustand. Only the IconName type is imported, not the component.
+ * actionIconName has no default case on purpose. TypeScript then reports a missing branch as soon
+ * as a new AuditActionType appears, so no action type can reach the UI without an icon.
+ */
 import type { AuditActionType } from '../types/data'
 import type { IconName } from '../components/Icon'
 import { formatNumber } from './stats'

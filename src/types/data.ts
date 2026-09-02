@@ -2,6 +2,7 @@ export type RawCellValue = string | number | boolean | Date | null | undefined
 
 export type RowData = Record<string, RawCellValue>
 
+/** One tab of a workbook, with its rows, column names, and identifier columns. */
 export type SheetData = {
   name: string
   columns: string[]
@@ -9,6 +10,7 @@ export type SheetData = {
   identifierColumns: string[]
 }
 
+/** The parsed file. Rows and columns are immutable after load. */
 export type WorkbookData = {
   fileName: string
   sheets: SheetData[]
@@ -19,6 +21,7 @@ export type CellId = string
 
 export type CellMark = 'review' | 'problem' | 'keep' | 'custom' | 'blanked' | 'imputed'
 
+/** The edit overlay for one cell. Never stored in the raw row data. */
 export type CellState = {
   mark?: CellMark
   highlightColor?: string
@@ -46,6 +49,7 @@ export type AuditActionType =
   | 'impute_interpolate'
   | 'undo'
 
+/** One recorded change, grouped with related changes by groupId. */
 export type AuditAction = {
   id: string
   timestamp: string
@@ -69,6 +73,7 @@ export type AuditAction = {
   base?: number
 }
 
+/** One cell a review tool suggests for inspection. Discarded on sheet or column change. */
 export type PreviewCell = {
   cellId: CellId
   sheetName: string
@@ -79,6 +84,7 @@ export type PreviewCell = {
   reason: string
 }
 
+/** Descriptive statistics for one numeric column. A null field means the value is not computable. */
 export type DistributionSummary = {
   count: number
   missingCount: number
@@ -123,6 +129,7 @@ export const NORMALITY_TEST_OPTIONS: { value: NormalityTestType; label: string }
   { value: 'anderson-darling', label: 'Anderson-Darling' },
 ]
 
+/** The output of a normality test run against a numeric array. */
 export type NormalityTestResult = {
   testName: NormalityTestType
   statistic: number | null
@@ -131,6 +138,7 @@ export type NormalityTestResult = {
   warnings: string[]
 }
 
+/** One applied column transform with before/after statistics. */
 export type TransformAttempt = {
   id: string
   type: TransformationType
@@ -139,7 +147,7 @@ export type TransformAttempt = {
   appliedAt: string
   lambda?: number
   useOffset?: boolean
-  /** Log base used when type is 'log10'; defaults to 10 when absent (older history entries). */
+  /** Log base used when type is 'log10'. Absent on older history entries, which mean base 10. */
   base?: number
   statsBefore: DistributionSummary
   statsAfter: DistributionSummary
@@ -163,6 +171,7 @@ export const IMPUTATION_METHOD_OPTIONS: { value: ImputationMethod; label: string
 
 export const ROW_ORDER_AXIS = '__row_order__'
 
+/** A serialisable snapshot of the full workspace state for save and restore. */
 export type SessionFile = {
   version: 1
   savedAt: string
