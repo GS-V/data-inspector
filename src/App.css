@@ -3167,21 +3167,26 @@ button {
 /* ── Compare columns dropdown (chart overlay picker) ───────────────── */
 
 .compare-columns-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(72px, 0.42fr) minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 9px;
 }
 
+.compare-columns-row {
+  grid-template-columns: minmax(66px, 0.38fr) minmax(0, 1fr);
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
 .compare-columns-row-label {
-  flex-shrink: 0;
   color: var(--muted-text);
   font-size: 12px;
   font-weight: 700;
 }
 
 .compare-columns-row .compare-columns-dropdown {
-  flex: 1;
   min-width: 0;
 }
 
