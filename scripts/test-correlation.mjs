@@ -9,7 +9,15 @@ import { stripTypeScriptTypes } from 'node:module'
 const source = readFileSync(new URL('../src/utils/stats.ts', import.meta.url), 'utf8')
 const start = source.lastIndexOf('/*', source.indexOf(' * Pearson r for two numeric arrays.'))
 const js = stripTypeScriptTypes(source.slice(start))
-const { pearsonR, spearmanR, kendallTauB, buildCorrelationMatrix } = await import(
+const {
+  pearsonR,
+  spearmanR,
+  kendallTauB,
+  buildCorrelationMatrix,
+  correlationPValue,
+  correlationCI,
+  kendallPValue,
+} = await import(
   `data:text/javascript,${encodeURIComponent(js)}`
 )
 
@@ -93,4 +101,65 @@ for (const { label, actual, prompt, scipy } of cases) {
 }
 console.log(`\nvs prompt expectations: ${promptPass}/${cases.length} passed`)
 console.log(`vs scipy reference:     ${scipyPass}/${cases.length} passed`)
-process.exitCode = scipyPass === cases.length ? 0 : 1
+
+// ─── p-value and CI functions ────────────────────────────────────────────────
+// These call the real exported functions from stats.ts (loaded above), not inline copies.
+// Expected values: p-values from scipy.stats.t.sf / norm.sf (1.13.1); CIs from the Fisher-z
+// formula with 1.96, which scipy's pearsonr().confidence_interval matches to 1e-4. Several
+// values in the original request were off (e.g. kendallP(0.5, 40) is 5.52e-6, not 2.64e-4);
+// the corrected values are used here.
+const statCases = []
+function assert(got, expected, tol, label) {
+  const pass = typeof expected === 'boolean' ? got === expected : Math.abs(got - expected) <= tol
+  statCases.push(pass)
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${label.padEnd(46)} got=${String(got).padEnd(22)} expected=${expected}`)
+}
+
+assert(correlationPValue(0.997, 40), 0, 1e-10, 'pValue: r≈1 → p≈0 (7.6e-44)')
+assert(correlationPValue(0.0, 40), 1.0, 1e-6, 'pValue: r=0 → p=1')
+assert(correlationPValue(0.3, 40), 0.0600018, 1e-6, 'pValue: r=0.3 n=40')
+assert(correlationPValue(0.3, 10), 0.399691, 1e-6, 'pValue: r=0.3 n=10')
+assert(correlationPValue(0.44, 20), 0.0522096, 1e-6, 'pValue: r=0.44 n=20 (normal approx gave 0.038)')
+assert(Number.isNaN(correlationPValue(NaN, 40)), true, 0, 'pValue: NaN r → NaN p')
+assert(Number.isNaN(correlationPValue(0.3, 3)), true, 0, 'pValue: n<4 → NaN')
+
+const ci1 = correlationCI(0.0, 40)
+assert(ci1[0], -0.311515, 1e-5, 'CI: r=0 n=40 lower')
+assert(ci1[1], 0.311515, 1e-5, 'CI: r=0 n=40 upper')
+const ci2 = correlationCI(0.9, 40)
+assert(ci2[0], 0.817753, 1e-5, 'CI pearson: r=0.9 n=40 lower')
+assert(ci2[1], 0.946227, 1e-5, 'CI pearson: r=0.9 n=40 upper')
+const ci3 = correlationCI(0.9, 10)
+assert(ci3[0], 0.623927, 1e-5, 'CI pearson: r=0.9 n=10 lower')
+assert(ci3[1], 0.97636, 1e-5, 'CI pearson: r=0.9 n=10 upper')
+assert(Number.isNaN(correlationCI(1.0, 40)[0]), true, 0, 'CI: |r|=1 → NaN')
+assert(Number.isNaN(correlationCI(0.5, 3)[0]), true, 0, 'CI: n<4 → NaN')
+
+// Spearman: Fisher-z variance (1 + r²/2)/(n-3), Bonett & Wright (2000) -- wider than Pearson.
+const ciSp = correlationCI(0.9, 40, 'spearman')
+assert(ciSp[0] < ci2[0], true, 0, 'CI spearman lower < pearson lower (wider)')
+assert(ciSp[1] > ci2[1], true, 0, 'CI spearman upper > pearson upper (wider)')
+assert(ciSp[0], 0.796981, 1e-5, 'CI spearman: r=0.9 n=40 lower')
+assert(ciSp[1], 0.952136, 1e-5, 'CI spearman: r=0.9 n=40 upper')
+assert(correlationCI(0.9, 40)[0] === correlationCI(0.9, 40, 'pearson')[0], true, 0, "CI: default method is 'pearson'")
+
+// Kendall: tie-free normal approximation, evaluated through erfc.
+assert(kendallPValue(0.0, 40), 1.0, 1e-6, 'kendallP: tau=0 → p=1')
+assert(kendallPValue(0.5, 40), 5.5222e-6, 1e-8, 'kendallP: tau=0.5 n=40')
+assert(kendallPValue(0.3, 40), 0.0064041, 1e-6, 'kendallP: tau=0.3 n=40')
+assert(kendallPValue(0.97, 39) > 0, true, 0, 'kendallP: strong tau does not underflow to 0')
+assert(Number.isNaN(kendallPValue(NaN, 40)), true, 0, 'kendallP: NaN tau → NaN')
+
+// buildCorrelationMatrix wires the method through to the CI and p-value.
+const sx = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+const sy = [2, 1, 4, 3, 6, 5, 8, 7, 10, 9]
+const sp = buildCorrelationMatrix([{ name: 'x', values: sx }, { name: 'y', values: sy }], 'spearman').statsMatrix[0][1]
+const spCI = correlationCI(sp.r, 10, 'spearman')
+assert(sp.n === 10 && sp.ciLow === spCI[0] && sp.ciHigh === spCI[1], true, 0, 'matrix: spearman cell uses spearman CI')
+assert(sp.p === correlationPValue(sp.r, 10), true, 0, 'matrix: spearman cell p = correlationPValue')
+const kc = buildCorrelationMatrix([{ name: 'x', values: sx }, { name: 'y', values: sy }], 'kendall').statsMatrix[0][1]
+assert(Number.isNaN(kc.ciLow) && kc.p === kendallPValue(kc.r, 10), true, 0, 'matrix: kendall cell has no CI, kendall p')
+
+const statPass = statCases.filter(Boolean).length
+console.log(`\np-value / CI functions: ${statPass}/${statCases.length} passed`)
+process.exitCode = scipyPass === cases.length && statPass === statCases.length ? 0 : 1
