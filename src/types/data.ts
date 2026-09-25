@@ -108,6 +108,9 @@ export type PlotType =
   | 'cdf'
   | 'violin'
   | 'correlation'
+  | 'completeness'
+  | 'group-comparison'
+  | 'timeseries'
 
 export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
   { value: 'table', label: 'Table' },
@@ -119,6 +122,9 @@ export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
   { value: 'density', label: 'Density plot (KDE)' },
   { value: 'cdf', label: 'Cumulative distribution' },
   { value: 'correlation', label: 'Correlation' },
+  { value: 'completeness', label: 'Completeness' },
+  { value: 'group-comparison', label: 'Group Comparison' },
+  { value: 'timeseries', label: 'Time Series' },
 ]
 
 export type TransformationType = 'log' | 'log10' | 'sqrt' | 'boxcox' | 'zscore'
@@ -183,6 +189,8 @@ export type SessionFile = {
   xAxis: string
   plotType: PlotType
   comparisonColumns: string[]
+  /** Absent in session files saved before Group Comparison / Time Series existed. */
+  groupByColumn?: string | null
   requireReason: boolean
   normalityTestType: NormalityTestType
   normalityThreshold: number

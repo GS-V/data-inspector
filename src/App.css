@@ -1569,7 +1569,7 @@ th.data-grid-row-number {
    :not() chain, or better, give it a dedicated non-growing rule (see .chart-active-columns below)
    instead of depending on exclusion from this catch-all. The Plot wrapper (.chart-plot-area)
    doesn't rely on this catch-all at all -- it has its own explicit flex:1 rule below. */
-.chart-panel > div:not(.chart-toolbar):not(.chart-active-columns) {
+.chart-panel > div:not(.chart-toolbar):not(.chart-active-columns):not(.group-stats-panel) {
   flex: 1;
   min-height: 0;
 }
@@ -3295,6 +3295,32 @@ button {
   border-color: var(--accent-text);
 }
 
+.corr-divider {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: var(--border-strong);
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.corr-stats-csv-btn {
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--strong-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.corr-stats-csv-btn:hover {
+  background: var(--row-hover-bg);
+}
+
 /* ── Chart export popover ───────────────────────────────────────────── */
 /* The trigger button now lives inline among the toolbar's other action buttons (Hide blanked
    points, Clear selection, Clear preview, Lines), so it inherits their height/border/background
@@ -3546,3 +3572,59 @@ button {
   }
 }
 
+/* ── Group Comparison ────────────────────────────────────── */
+/* Stats strip under the box plot. Excluded from the .chart-panel catch-all flex:1 rule above so it
+   takes only the space it needs; a long Dunn table scrolls instead of squashing the plot. */
+.group-stats-panel {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-kw-result {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--body-text);
+}
+
+.group-kw-label {
+  font-weight: 600;
+  color: var(--muted-text);
+  flex-shrink: 0;
+}
+
+.group-dunn-details {
+  color: var(--muted-text);
+}
+
+.group-dunn-details summary {
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+}
+
+.group-dunn-table {
+  margin-top: 6px;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8rem;
+}
+
+.group-dunn-table th,
+.group-dunn-table td {
+  padding: 2px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.group-dunn-table th {
+  color: var(--muted-text);
+  font-weight: 600;
+}
