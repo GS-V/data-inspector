@@ -207,7 +207,7 @@ export function kendallTauB(
 // Two-tailed standard normal tail, 2 * (1 - Phi(|z|)) = erfc(|z| / sqrt(2)).
 // Abramowitz & Stegun 7.1.26 (erf max abs error ~1.5e-7), evaluated as erfc directly: computing
 // 1 - Phi(z) by subtraction rounds to exactly 0 once z passes ~8, reporting p = 0.
-function normalTwoTailedP(z: number): number {
+export function normalTwoTailedP(z: number): number {
   const x = Math.abs(z) / Math.SQRT2
   const t = 1 / (1 + 0.3275911 * x)
   const poly =
@@ -304,6 +304,50 @@ export function correlationCI(
   return [Math.tanh(z - 1.96 * se), Math.tanh(z + 1.96 * se)]
 }
 
+// Regularized lower incomplete gamma P(a, x) by series (Numerical Recipes 6.2). Use for x < a + 1.
+function gammaSeries(a: number, x: number): number {
+  if (x <= 0) return 0
+  let term = 1 / a
+  let sum = term
+  for (let n = 1; n <= 300; n++) {
+    term *= x / (a + n)
+    sum += term
+    if (Math.abs(term) < 1e-15 * Math.abs(sum)) break
+  }
+  return Math.exp(-x + a * Math.log(x) - logGamma(a)) * sum
+}
+
+// Regularized upper incomplete gamma Q(a, x) by continued fraction (modified Lentz, NR 6.2).
+// Use for x >= a + 1.
+function gammaCF(a: number, x: number): number {
+  const TINY = 1e-300
+  let b = x + 1 - a
+  let c = 1 / TINY
+  let d = 1 / b
+  let h = d
+  for (let n = 1; n <= 300; n++) {
+    const aa = -n * (n - a)
+    b += 2
+    d = aa * d + b; if (Math.abs(d) < TINY) d = TINY
+    c = b + aa / c; if (Math.abs(c) < TINY) c = TINY
+    d = 1 / d
+    const delta = d * c
+    h *= delta
+    if (Math.abs(delta - 1) < 1e-15) break
+  }
+  return Math.exp(-x + a * Math.log(x) - logGamma(a)) * h
+}
+
+// Upper-tail p-value for the chi-squared distribution. Used for the Kruskal-Wallis H statistic.
+// Implements Q(df/2, H/2) via series or continued fraction (Numerical Recipes 6.2).
+export function chiSquaredSurvival(h: number, df: number): number {
+  if (Number.isNaN(h) || df <= 0) return NaN
+  if (h <= 0) return 1
+  const a = df / 2
+  const x = h / 2
+  return x < a + 1 ? 1 - gammaSeries(a, x) : gammaCF(a, x)
+}
+
 export type CorrelationCellStats = {
   r: number // correlation coefficient
   n: number // paired observations used (nulls dropped)
@@ -358,4 +402,109 @@ export function buildCorrelationMatrix(
     }
   }
   return { labels, matrix, statsMatrix }
+}
+
+// Midranks (1-based, ties averaged) over all groups pooled, with the tie term sum(t^3 - t).
+// Shared by kruskalWallis and dunnTest.
+function pooledRanks(groups: number[][]): { rankSums: number[]; tieSum: number } {
+  const all: { value: number; gi: number }[] = []
+  groups.forEach((g, gi) => g.forEach((v) => all.push({ value: v, gi })))
+  all.sort((a, b) => a.value - b.value)
+  const rankSums = new Array<number>(groups.length).fill(0)
+  let tieSum = 0
+  let i = 0
+  while (i < all.length) {
+    let j = i
+    while (j < all.length - 1 && all[j + 1].value === all[i].value) j++
+    const t = j - i + 1
+    const mid = (i + j + 2) / 2 // 1-based midrank
+    for (let m = i; m <= j; m++) rankSums[all[m].gi] += mid
+    if (t > 1) tieSum += t ** 3 - t
+    i = j + 1
+  }
+  return { rankSums, tieSum }
+}
+
+export type KWResult = {
+  H: number // tie-corrected test statistic
+  df: number // k - 1
+  p: number // chi-squared survival p-value
+}
+
+// Kruskal-Wallis H test with the standard tie correction (matches scipy.stats.kruskal and R's
+// kruskal.test).
+export function kruskalWallis(groups: number[][]): KWResult {
+  const sizes = groups.map((g) => g.length)
+  const N = sizes.reduce((s, n) => s + n, 0)
+  const k = groups.length
+  if (k < 2 || N < k + 1) return { H: NaN, df: k - 1, p: NaN }
+
+  const { rankSums, tieSum } = pooledRanks(groups)
+  const hRaw =
+    (12 / (N * (N + 1))) * rankSums.reduce((s, r, gi) => s + r ** 2 / sizes[gi], 0) - 3 * (N + 1)
+  const denominator = N ** 3 - N
+  const tieCorr = denominator > 0 ? 1 - tieSum / denominator : 1
+  // tieCorr is 0 only when every value is identical: no rank information, so no test.
+  if (!(tieCorr > 0)) return { H: NaN, df: k - 1, p: NaN }
+  const H = hRaw / tieCorr
+  return { H, df: k - 1, p: chiSquaredSurvival(H, k - 1) }
+}
+
+export type DunnPair = {
+  groupA: string
+  groupB: string
+  z: number
+  p: number
+  pAdj: number // Bonferroni: min(p * m, 1), m = k(k-1)/2
+}
+
+// Dunn's (1964) post-hoc test on pooled ranks with the tie-corrected variance, Bonferroni-adjusted.
+// Matches FSA::dunnTest(method = "bonferroni") and scikit-posthocs posthoc_dunn.
+export function dunnTest(groups: number[][], labels: string[]): DunnPair[] {
+  const sizes = groups.map((g) => g.length)
+  const N = sizes.reduce((s, n) => s + n, 0)
+  const k = groups.length
+  if (k < 2 || N - 1 <= 0) return []
+
+  const { rankSums, tieSum } = pooledRanks(groups)
+  const meanRanks = rankSums.map((r, gi) => r / sizes[gi])
+  const varBase = (N * (N + 1)) / 12 - tieSum / (12 * (N - 1))
+  const m = (k * (k - 1)) / 2
+  const results: DunnPair[] = []
+  for (let a = 0; a < k; a++) {
+    for (let b = a + 1; b < k; b++) {
+      const sigma = Math.sqrt(varBase * (1 / sizes[a] + 1 / sizes[b]))
+      const z = sigma > 0 ? (meanRanks[a] - meanRanks[b]) / sigma : NaN
+      const p = Number.isNaN(z) ? NaN : normalTwoTailedP(z)
+      results.push({ groupA: labels[a], groupB: labels[b], z, p, pAdj: Number.isNaN(p) ? NaN : Math.min(p * m, 1) })
+    }
+  }
+  return results
+}
+
+export type SeriesPoint = { x: number | string; mean: number; se: number; n: number }
+
+// Collapse repeated x values to mean and standard error (sample SD / sqrt(n)); se = 0 when n = 1.
+// Numbers sort numerically and sort before strings; strings sort in natural order ("T2" < "T10").
+export function aggregateSeries(rows: { x: number | string; y: number }[]): SeriesPoint[] {
+  const map = new Map<number | string, number[]>()
+  for (const { x, y } of rows) {
+    const ys = map.get(x)
+    if (ys) ys.push(y)
+    else map.set(x, [y])
+  }
+  const points: SeriesPoint[] = []
+  for (const [x, ys] of map) {
+    const n = ys.length
+    const mean = ys.reduce((s, v) => s + v, 0) / n
+    const se = n > 1 ? Math.sqrt(ys.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)) / Math.sqrt(n) : 0
+    points.push({ x, mean, se, n })
+  }
+  points.sort((a, b) => {
+    if (typeof a.x === 'number' && typeof b.x === 'number') return a.x - b.x
+    if (typeof a.x === 'number') return -1
+    if (typeof b.x === 'number') return 1
+    return a.x.localeCompare(b.x, undefined, { numeric: true })
+  })
+  return points
 }

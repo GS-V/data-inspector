@@ -18,9 +18,9 @@ import {
   getVisibleColumnValues,
   type VisibleColumnValue,
 } from '../utils/chartData'
-import { rowsToCsv, downloadCsv } from '../utils/exportCsv'
+import { rowsToCsv, downloadBlob, downloadCsv } from '../utils/exportCsv'
 import { findValueColumns, getDisplayValue, getEffectiveValue, isDateCol, isMissing, toNumber } from '../utils/numeric'
-import { buildCorrelationMatrix, formatNumber } from '../utils/stats'
+import { aggregateSeries, buildCorrelationMatrix, dunnTest, formatNumber, kruskalWallis } from '../utils/stats'
 
 type PlotPointEvent = {
   points?: Array<{
@@ -102,6 +102,28 @@ function eventCellIds(event: unknown): string[] {
   )
 }
 
+// Tooltip / table p-value text. d3-format's .4f would print "0.0000" for any p < 5e-5.
+function fmtP(rawP: number, isDiag: boolean): string {
+  if (isDiag || rawP === 0) return 'p = 0'
+  if (Number.isNaN(rawP)) return 'n/a'
+  if (rawP < 1e-4) return 'p < 1e-4'
+  return `p = ${rawP.toFixed(4)}`
+}
+
+// Stars for a single already-adjusted p. The correlation heatmap keeps its own sigStars, which
+// also handles the diagonal and the Bonferroni toggle.
+function sigStarsSimple(p: number): string {
+  if (Number.isNaN(p) || p >= 0.05) return 'n.s.'
+  if (p < 0.001) return '***'
+  if (p < 0.01) return '**'
+  return '*'
+}
+
+// R identifier for a column name, safe for names with spaces or symbols.
+function rName(column: string): string {
+  return `\`${column.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\``
+}
+
 type InspectorChartProps = {
   theme: 'light' | 'dark'
 }
@@ -172,6 +194,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     selectedColumn,
     xAxis,
     plotType,
+    groupByColumn,
     comparisonColumns,
     selectedCells,
     previewCells,
@@ -754,13 +777,6 @@ export function InspectorChart({ theme }: InspectorChartProps) {
         return `${cell.r.toFixed(2)}${sigStars(cell.p, i === j)}`
       }),
     )
-    // Tooltip display only. d3-format's .4f would print "0.0000" for any p < 5e-5.
-    function fmtP(rawP: number, isDiag: boolean): string {
-      if (isDiag || rawP === 0) return 'p = 0'
-      if (Number.isNaN(rawP)) return 'n/a'
-      if (rawP < 1e-4) return 'p < 1e-4'
-      return `p = ${rawP.toFixed(4)}`
-    }
     // Parallel to z. Slot [2] is always the RAW numeric p -- see effectiveP above; slot [6] is
     // its display string.
     const customData = statsMatrix.map((row, i) =>
@@ -1077,6 +1093,282 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             ],
             paper_bgcolor: chartColors.paper,
             plot_bgcolor: chartColors.plot,
+          }}
+          config={{ displaylogo: false, displayModeBar: false, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler
+        />
+        </div>
+      </section>
+    )
+  }
+
+  // Group comparison -- read-only. Uses CLEANED values (blanked cells excluded, replacements and
+  // transforms applied), like every chart except Completeness.
+  if (plotType === 'group-comparison') {
+    const effectiveGroupBy = groupByColumn && groupByColumn !== selectedColumn && sheet.columns.includes(groupByColumn)
+      ? groupByColumn
+      : null
+
+    if (!effectiveGroupBy) {
+      return (
+        <section className="panel chart-panel">
+          {renderChartHeader([selectedColumn])}
+          <div className="chart-empty-state">Select a &quot;Group by&quot; column in the sidebar to compare groups.</div>
+        </section>
+      )
+    }
+
+    const groupMap = new Map<string, number[]>()
+    sheet.rows.forEach((row, rowIndex) => {
+      const gVal = row[effectiveGroupBy]
+      if (isMissing(gVal)) return
+      const state = cellState[makeCellId(sheet.name, rowIndex, selectedColumn)]
+      if (state?.valueOverride === null) return
+      const yVal = toNumber(getEffectiveValue(row[selectedColumn], state))
+      if (yVal === null) return
+      const label = getDisplayValue(gVal)
+      const values = groupMap.get(label)
+      if (values) values.push(yVal)
+      else groupMap.set(label, [yVal])
+    })
+
+    // Natural order, so numeric-looking groups sort 1, 2, 10 rather than 1, 10, 2.
+    const groupLabels = [...groupMap.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    const groups = groupLabels.map((label) => groupMap.get(label)!)
+    const totalN = groups.reduce((sum, g) => sum + g.length, 0)
+
+    const kw = kruskalWallis(groups)
+    const dunn = groupLabels.length >= 3 && !Number.isNaN(kw.H) ? dunnTest(groups, groupLabels) : null
+    // Every point is drawn (jittered) up to this size; above it, only outliers.
+    const showAllPoints = totalN <= 5000
+
+    const boxTraces = groupLabels.map((label, gi) => {
+      const color = COMPARISON_COLOR_PALETTE[gi % COMPARISON_COLOR_PALETTE.length]
+      return {
+        type: 'box' as const,
+        name: label,
+        y: groupMap.get(label)!,
+        boxmean: true as const,
+        boxpoints: showAllPoints ? ('all' as const) : ('outliers' as const),
+        jitter: 0.3,
+        pointpos: 0,
+        marker: { color, opacity: 0.6, size: 4 },
+        line: { color },
+        hovertemplate: `${label}<br>${selectedColumn}: %{y:.3f}<extra></extra>`,
+      }
+    })
+
+    function downloadRScript() {
+      const y = rName(selectedColumn)
+      const g = rName(effectiveGroupBy!)
+      const title = `Group Comparison: ${selectedColumn} by ${effectiveGroupBy}`.replace(/"/g, '\\"')
+      const lines = [
+        '# Data Inspector — Group Comparison Export',
+        `# Response: ${selectedColumn}  |  Group: ${effectiveGroupBy}`,
+        `# Generated: ${new Date().toISOString().split('T')[0]}`,
+        '#',
+        '# The app ran these tests on the CLEANED values. To match its numbers, point read.csv at',
+        '# the cleaned CSV from "Export data" rather than the original file.',
+        '',
+        'df <- read.csv("your_file.csv", check.names = FALSE)',
+        `df[[${JSON.stringify(effectiveGroupBy)}]] <- factor(df[[${JSON.stringify(effectiveGroupBy)}]])`,
+        '',
+        '# Kruskal-Wallis test',
+        `kruskal.test(${y} ~ ${g}, data = df)`,
+        '',
+        "# Dunn's pairwise test, Bonferroni-adjusted (same test as the app's table)",
+        '# install.packages("FSA")',
+        `FSA::dunnTest(${y} ~ ${g}, data = df, method = "bonferroni")`,
+        '',
+        '# Visualize',
+        'library(ggplot2)',
+        `ggplot(df, aes(x = ${g}, y = ${y}, fill = ${g})) +`,
+        '  geom_boxplot(outlier.shape = NA) +',
+        '  geom_jitter(width = 0.2, alpha = 0.5) +',
+        `  labs(title = "${title}") +`,
+        '  theme_minimal()',
+        '',
+      ]
+      // Plain text, no byte-order mark: downloadCsv adds one for Excel, and R's parser would see
+      // it as a stray character on line 1.
+      downloadBlob(
+        `group-comparison-${selectedColumn}-by-${effectiveGroupBy}.R`.replace(/[\\/:*?"<>|\s]+/g, '_'),
+        new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }),
+      )
+    }
+
+    const kwLine = Number.isNaN(kw.H)
+      ? 'Not enough data (need ≥ 2 groups, more observations than groups, and some variation)'
+      : `H(${kw.df}) = ${kw.H.toFixed(3)},  ${fmtP(kw.p, false)}  ${sigStarsSimple(kw.p)}`
+
+    return (
+      <section className="panel chart-panel">
+        {renderChartHeader([selectedColumn, effectiveGroupBy])}
+        <div className="chart-toolbar">
+          <div className="chart-tip">{`n = ${totalN} across ${groupLabels.length} group${groupLabels.length !== 1 ? 's' : ''}`}</div>
+          <div className="chart-actions">
+            <button type="button" className="corr-stats-csv-btn" onClick={downloadRScript}>
+              Export R script
+            </button>
+            {renderExportControl([selectedColumn, effectiveGroupBy])}
+          </div>
+        </div>
+        <div className="chart-plot-area" ref={chartAreaRef}>
+        <Plot
+          ref={graphDivRef}
+          data={boxTraces}
+          layout={{
+            autosize: true,
+            height: chartAreaHeight ?? 350,
+            paper_bgcolor: chartColors.paper,
+            plot_bgcolor: chartColors.plot,
+            font: { color: chartColors.text },
+            showlegend: false,
+            margin: { t: 20, r: 16, b: 60, l: 60 },
+            // Category axis: numeric-looking groups (DAS 14, 28, ...) stay evenly spaced in the
+            // sorted order above instead of being placed on a numeric scale.
+            xaxis: {
+              title: { text: effectiveGroupBy },
+              type: 'category' as const,
+              gridcolor: chartColors.grid,
+              zeroline: false,
+              automargin: true,
+            },
+            yaxis: { title: { text: selectedColumn }, gridcolor: chartColors.grid, zeroline: false, automargin: true },
+          }}
+          config={{ displaylogo: false, displayModeBar: false, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler
+        />
+        </div>
+        <div className="group-stats-panel">
+          <div className="group-kw-result">
+            <span className="group-kw-label">Kruskal-Wallis</span>
+            <span>{kwLine}</span>
+          </div>
+          {dunn && dunn.length > 0 && (
+            <details className="group-dunn-details">
+              <summary>Dunn&apos;s pairwise test (Bonferroni-adjusted p)</summary>
+              <table className="group-dunn-table">
+                <thead>
+                  <tr>
+                    <th>Group A</th>
+                    <th>Group B</th>
+                    <th>z</th>
+                    <th>p (adj)</th>
+                    <th aria-label="Significance" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {dunn.map((row) => (
+                    <tr key={`${row.groupA}\u0000${row.groupB}`}>
+                      <td>{row.groupA}</td>
+                      <td>{row.groupB}</td>
+                      <td>{Number.isNaN(row.z) ? 'n/a' : row.z.toFixed(2)}</td>
+                      <td>{fmtP(row.pAdj, false)}</td>
+                      <td>{sigStarsSimple(row.pAdj)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  // Time series -- read-only. Cleaned Y values against the X-axis column (or row order); repeated
+  // X values collapse to mean ± SE, per group when a "Group by" column is set.
+  if (plotType === 'timeseries') {
+    const isRowOrder = xAxis === ROW_ORDER_AXIS
+    const isDateX = !isRowOrder && isDateCol(xAxis, sheet.rows)
+    const effectiveGroupBy = groupByColumn && groupByColumn !== selectedColumn && sheet.columns.includes(groupByColumn)
+      ? groupByColumn
+      : null
+    const xLabel = isRowOrder ? 'Row' : xAxis
+    const NO_GROUP = '(no group)'
+
+    const seriesRows = new Map<string, { x: number | string; y: number }[]>()
+    sheet.rows.forEach((row, rowIndex) => {
+      const state = cellState[makeCellId(sheet.name, rowIndex, selectedColumn)]
+      if (state?.valueOverride === null) return
+      const y = toNumber(getEffectiveValue(row[selectedColumn], state))
+      if (y === null) return
+      // Same resolution as the Scatter view: a Date column becomes epoch ms on a date axis.
+      const x = isRowOrder
+        ? rowIndex + 1
+        : resolveAxisValue(getEffectiveValue(row[xAxis], cellState[makeCellId(sheet.name, rowIndex, xAxis)]), isDateX)
+      if (x === null) return
+      const group = effectiveGroupBy
+        ? isMissing(row[effectiveGroupBy]) ? NO_GROUP : getDisplayValue(row[effectiveGroupBy])
+        : selectedColumn
+      const list = seriesRows.get(group)
+      if (list) list.push({ x, y })
+      else seriesRows.set(group, [{ x, y }])
+    })
+
+    const seriesLabels = [...seriesRows.keys()].sort((a, b) =>
+      a === NO_GROUP ? 1 : b === NO_GROUP ? -1 : a.localeCompare(b, undefined, { numeric: true }),
+    )
+    const traces = seriesLabels.map((label, gi) => {
+      const pts = aggregateSeries(seriesRows.get(label)!)
+      const hasMultiple = pts.some((p) => p.n > 1)
+      const color = COMPARISON_COLOR_PALETTE[gi % COMPARISON_COLOR_PALETTE.length]
+      const prefix = effectiveGroupBy ? `${label}<br>` : ''
+      const xFmt = isDateX ? '%{x|%Y-%m-%d}' : '%{x}'
+      return {
+        type: 'scatter' as const,
+        mode: 'lines+markers' as const,
+        name: label,
+        x: pts.map((p) => p.x),
+        y: pts.map((p) => p.mean),
+        error_y: { type: 'data' as const, array: pts.map((p) => p.se), visible: hasMultiple, color },
+        line: { color },
+        marker: { color, size: 6 },
+        // [n, SE]: Plotly has no hover field for error_y values.
+        customdata: pts.map((p) => [p.n, p.se]),
+        hovertemplate: hasMultiple
+          ? `${prefix}${xLabel}: ${xFmt}<br>Mean: %{y:.3f} ± %{customdata[1]:.3f} SE<br>n: %{customdata[0]}<extra></extra>`
+          : `${prefix}${xLabel}: ${xFmt}<br>${selectedColumn}: %{y:.3f}<extra></extra>`,
+      }
+    })
+
+    const headerColumns = effectiveGroupBy ? [selectedColumn, effectiveGroupBy] : [selectedColumn]
+
+    return (
+      <section className="panel chart-panel">
+        {renderChartHeader(headerColumns)}
+        <div className="chart-toolbar">
+          <div className="chart-tip">
+            {traces.length === 0
+              ? 'No rows have both a numeric value and an X value.'
+              : 'Repeated X values are averaged; error bars show ± 1 SE.'}
+          </div>
+          <div className="chart-actions">{renderExportControl(headerColumns)}</div>
+        </div>
+        <div className="chart-plot-area" ref={chartAreaRef}>
+        <Plot
+          ref={graphDivRef}
+          data={traces}
+          layout={{
+            autosize: true,
+            height: chartAreaHeight ?? 350,
+            paper_bgcolor: chartColors.paper,
+            plot_bgcolor: chartColors.plot,
+            font: { color: chartColors.text },
+            showlegend: Boolean(effectiveGroupBy),
+            legend: { font: { color: chartColors.text } },
+            margin: { t: 20, r: 16, b: 60, l: 60 },
+            xaxis: {
+              title: { text: xLabel },
+              type: isDateX ? ('date' as const) : undefined,
+              gridcolor: chartColors.grid,
+              zeroline: false,
+              automargin: true,
+            },
+            yaxis: { title: { text: selectedColumn }, gridcolor: chartColors.grid, zeroline: false, automargin: true },
           }}
           config={{ displaylogo: false, displayModeBar: false, responsive: true }}
           style={{ width: '100%', height: '100%' }}

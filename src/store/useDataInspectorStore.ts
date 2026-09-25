@@ -56,6 +56,9 @@ type DataInspectorState = {
   selectedColumn: string
   xAxis: string
   plotType: PlotType
+  // Grouping column for Group Comparison and Time Series. Flat like plotType; reset on file and
+  // sheet change because column names are per-sheet.
+  groupByColumn: string | null
   // Additional numeric columns overlaid on the chart alongside selectedColumn -- visualization-only.
   // Cleaning tools, the stats panel, and transforms always operate on selectedColumn regardless of
   // this list. Cleared whenever selectedColumn, the active sheet, or the workbook changes.
@@ -95,6 +98,7 @@ type DataInspectorState = {
   setSelectedColumn: (columnName: string, options?: { preserveSelection?: boolean }) => void
   setXAxis: (xAxis: string) => void
   setPlotType: (plotType: PlotType) => void
+  setGroupByColumn: (column: string | null) => void
   addComparisonColumn: (columnName: string) => void
   removeComparisonColumn: (columnName: string) => void
   clearComparisonColumns: () => void
@@ -355,6 +359,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     selectedColumn: '',
     xAxis: ROW_ORDER_AXIS,
     plotType: 'scatter',
+    groupByColumn: null,
     comparisonColumns: [],
     selectedCells: {},
     isSelecting: false,
@@ -376,6 +381,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         selectedColumn,
         xAxis: ROW_ORDER_AXIS,
         plotType: 'scatter',
+        groupByColumn: null,
         comparisonColumns: [],
         selectedCells: {},
         previewCells: {},
@@ -406,6 +412,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         activeSheetName: sheetName,
         selectedColumn,
         xAxis,
+        groupByColumn: null,
         comparisonColumns: [],
         selectedCells: {},
         previewCells: {},
@@ -433,6 +440,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
     // Table ignores it. No plot type mishandles it, so a plot-type change never needs to clear
     // comparisonColumns.
     setPlotType: (plotType) => set({ plotType }),
+
+    setGroupByColumn: (column) => set({ groupByColumn: column }),
 
     addComparisonColumn: (columnName) => {
       const { comparisonColumns, selectedColumn, xAxis, workbook, activeSheetName } = get()
@@ -912,6 +921,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         xAxis: state.xAxis,
         plotType: state.plotType,
         comparisonColumns: state.comparisonColumns,
+        groupByColumn: state.groupByColumn,
         requireReason: state.requireReason,
         normalityTestType: state.normalityTestType,
         normalityThreshold: state.normalityThreshold,
@@ -949,6 +959,8 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         xAxis: session.xAxis,
         plotType: session.plotType,
         comparisonColumns: session.comparisonColumns,
+        // Older session files have no groupByColumn; fall back to none.
+        groupByColumn: session.groupByColumn ?? null,
         requireReason: session.requireReason,
         normalityTestType: session.normalityTestType,
         normalityThreshold: session.normalityThreshold,
