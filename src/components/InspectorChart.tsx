@@ -18,7 +18,8 @@ import {
   getVisibleColumnValues,
   type VisibleColumnValue,
 } from '../utils/chartData'
-import { getDisplayValue, getEffectiveValue, isDateCol, toNumber } from '../utils/numeric'
+import { rowsToCsv, downloadCsv } from '../utils/exportCsv'
+import { findValueColumns, getDisplayValue, getEffectiveValue, isDateCol, isMissing, toNumber } from '../utils/numeric'
 import { buildCorrelationMatrix, formatNumber } from '../utils/stats'
 
 type PlotPointEvent = {
@@ -198,6 +199,10 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   // Correlation method -- transient view state, like the Lines toggle. Declared up here with the
   // other hooks because the component returns early below.
   const [corrMethod, setCorrMethod] = useState<'pearson' | 'spearman' | 'kendall'>('pearson')
+  // Significance display toggles for the heatmap. View-only: they change stars and masking, never
+  // the underlying r, n, or raw p (which the tooltip and Stats CSV always report).
+  const [showMaskNS, setShowMaskNS] = useState(false)
+  const [useBonferroni, setUseBonferroni] = useState(false)
 
   const [lastObservedPlotType, setLastObservedPlotType] = useState(plotType)
   if (plotType !== lastObservedPlotType) {
@@ -722,9 +727,96 @@ export function InspectorChart({ theme }: InspectorChartProps) {
     // expensive Kendall matrix would already have been computed once. corrMethod keeps 'kendall',
     // so a smaller sheet switches back to it on its own.
     const activeCorrMethod = kendallDisabled && corrMethod === 'kendall' ? 'spearman' : corrMethod
-    const { labels, matrix } = buildCorrelationMatrix(columnValues, activeCorrMethod)
+    const { labels, matrix, statsMatrix } = buildCorrelationMatrix(columnValues, activeCorrMethod)
     const methodLabel =
       activeCorrMethod === 'pearson' ? 'Pearson r' : activeCorrMethod === 'spearman' ? 'Spearman ρ' : 'Kendall τ-b'
+
+    // Bonferroni applies only to stars and the n.s. mask. Raw p is always what the tooltip and
+    // the Stats CSV report.
+    const numUniquePairs = (labels.length * (labels.length - 1)) / 2
+    const effectiveP = (rawP: number): number => (useBonferroni ? Math.min(rawP * numUniquePairs, 1.0) : rawP)
+
+    function sigStars(rawP: number, isDiag: boolean): string {
+      if (isDiag || Number.isNaN(rawP)) return ''
+      const p = effectiveP(rawP)
+      if (p < 0.001) return '***'
+      if (p < 0.01) return '**'
+      if (p < 0.05) return '*'
+      return ''
+    }
+
+    const isMasked = (i: number, j: number) =>
+      showMaskNS && i !== j && !Number.isNaN(statsMatrix[i][j].r) && !(effectiveP(statsMatrix[i][j].p) < 0.05)
+    const cellText = statsMatrix.map((row, i) =>
+      row.map((cell, j) => {
+        if (Number.isNaN(cell.r)) return 'N/A'
+        if (isMasked(i, j)) return ''
+        return `${cell.r.toFixed(2)}${sigStars(cell.p, i === j)}`
+      }),
+    )
+    // Tooltip display only. d3-format's .4f would print "0.0000" for any p < 5e-5.
+    function fmtP(rawP: number, isDiag: boolean): string {
+      if (isDiag || rawP === 0) return 'p = 0'
+      if (Number.isNaN(rawP)) return 'n/a'
+      if (rawP < 1e-4) return 'p < 1e-4'
+      return `p = ${rawP.toFixed(4)}`
+    }
+    // Parallel to z. Slot [2] is always the RAW numeric p -- see effectiveP above; slot [6] is
+    // its display string.
+    const customData = statsMatrix.map((row, i) =>
+      row.map((cell, j) => [
+        cell.r,
+        cell.n,
+        cell.p,
+        cell.ciLow,
+        cell.ciHigh,
+        i === j ? 1 : 0,
+        fmtP(cell.p, i === j),
+      ]),
+    )
+    // NaN (too few paired values) and masked n.s. cells become null, which Plotly draws as a gap.
+    const zValues = matrix.map((row, i) =>
+      row.map((value, j) => {
+        if (Number.isNaN(value) || isMasked(i, j)) return null
+        return value
+      }),
+    )
+
+    const hasCorrCI = activeCorrMethod !== 'kendall'
+    const corrHoverTemplate = [
+      '%{y} × %{x}',
+      `${methodLabel}: %{customdata[0]:.4f}`,
+      'n pairs: %{customdata[1]}',
+      '%{customdata[6]} (raw)',
+      hasCorrCI ? '95% CI: [%{customdata[3]:.3f}, %{customdata[4]:.3f}]' : null,
+      useBonferroni ? `Bonferroni active — stars and mask use p × ${numUniquePairs}` : null,
+      '<extra></extra>',
+    ]
+      .filter(Boolean)
+      .join('<br>')
+
+    function downloadStatsCsv() {
+      const orNull = (v: number) => (Number.isNaN(v) ? null : v)
+      const rows: Record<string, string | number | null>[] = []
+      for (let i = 0; i < labels.length; i++) {
+        for (let j = i + 1; j < labels.length; j++) {
+          const c = statsMatrix[i][j]
+          rows.push({
+            col_A: labels[i],
+            col_B: labels[j],
+            method: activeCorrMethod,
+            r: orNull(c.r),
+            n: c.n,
+            p: orNull(c.p),
+            ci_low: orNull(c.ciLow),
+            ci_high: orNull(c.ciHigh),
+          })
+        }
+      }
+      // rowsToCsv quotes any column name containing a comma, quote, or newline.
+      const csv = rowsToCsv(rows, ['col_A', 'col_B', 'method', 'r', 'n', 'p', 'ci_low', 'ci_high'])
+      downloadCsv(`correlation-stats-${activeCorrMethod}.csv`, csv)
+    }
 
     return (
       <section className="panel chart-panel">
@@ -758,8 +850,33 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             >
               Kendall
             </button>
+            <span className="corr-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className={showMaskNS ? 'code-lang-active' : undefined}
+              aria-pressed={showMaskNS}
+              onClick={() => setShowMaskNS((v) => !v)}
+              title="Hide cells where effective p >= 0.05. Stars: * p<0.05  ** p<0.01  *** p<0.001"
+            >
+              Mask n.s.
+            </button>
+            <span className="corr-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className={useBonferroni ? 'code-lang-active' : undefined}
+              aria-pressed={useBonferroni}
+              onClick={() => setUseBonferroni((v) => !v)}
+              title="Bonferroni correction: multiply each p-value by the number of unique pairs before thresholding. Reduces false positives when comparing many columns simultaneously."
+            >
+              Bonferroni
+            </button>
           </div>
-          <div className="chart-actions">{renderExportControl(corrColumns)}</div>
+          <div className="chart-actions">
+            <button type="button" className="corr-stats-csv-btn" onClick={downloadStatsCsv}>
+              ↓ Stats CSV
+            </button>
+            {renderExportControl(corrColumns)}
+          </div>
         </div>
         <div className="chart-plot-area" ref={chartAreaRef}>
         <Plot
@@ -769,8 +886,7 @@ export function InspectorChart({ theme }: InspectorChartProps) {
               type: 'heatmap' as const,
               x: labels,
               y: labels,
-              // NaN (too few paired values) becomes null, which Plotly draws as an empty gap.
-              z: matrix.map((row) => row.map((value) => (Number.isNaN(value) ? null : value))),
+              z: zValues,
               zmin: -1,
               zmax: 1,
               colorscale: [
@@ -778,10 +894,11 @@ export function InspectorChart({ theme }: InspectorChartProps) {
                 [0.5, '#ffffff'],
                 [1, '#7fa3d6'],
               ],
-              text: matrix.map((row) => row.map((value) => (Number.isNaN(value) ? 'N/A' : value.toFixed(2)))),
+              text: cellText,
               texttemplate: '%{text}',
               textfont: { color: '#222222' },
-              hovertemplate: `%{y} × %{x}<br>${methodLabel}: %{text}<extra></extra>`,
+              customdata: customData,
+              hovertemplate: corrHoverTemplate,
               showscale: true,
               colorbar: { thickness: 14, len: 0.8 },
             },
@@ -793,6 +910,171 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             font: { color: chartColors.text, size: 11 },
             xaxis: { side: 'bottom', tickangle: -35, automargin: true },
             yaxis: { autorange: 'reversed' as const, automargin: true },
+            paper_bgcolor: chartColors.paper,
+            plot_bgcolor: chartColors.plot,
+          }}
+          config={{ displaylogo: false, displayModeBar: false, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler
+        />
+        </div>
+      </section>
+    )
+  }
+
+  // Completeness view -- read-only, no cell selection.
+  // Reads RAW sheet values (not cellState), so it shows the gaps in the original file rather
+  // than cells the user blanked during QC.
+  // Both sections live in ONE Plotly figure (two subplots) rather than two <Plot>s: graphDivRef
+  // and the chart-area ResizeObserver both assume exactly one mounted <Plot>, and a single figure
+  // keeps chart export capturing the whole view.
+  if (plotType === 'completeness') {
+    const valueColumns = findValueColumns(sheet.rows, sheet.columns)
+    const corrColumns = [selectedColumn, ...comparisonColumns].filter((column) => valueColumns.includes(column))
+    const totalRows = sheet.rows.length
+    const showGrid = corrColumns.length >= 2
+
+    const missingCounts = corrColumns.map(
+      (column) => sheet.rows.filter((row) => isMissing(row[column])).length,
+    )
+    const missingPct = missingCounts.map((count) => (totalRows > 0 ? (count / totalRows) * 100 : 0))
+    const barColors = missingPct.map((pct) => (pct <= 5 ? chartColors.histogram : pct <= 20 ? '#fb8500' : '#e63946'))
+
+    // Row labels: the file's identifier column if the parser found one, otherwise the first
+    // non-numeric column, otherwise the 1-based row number (matching "Row N" elsewhere).
+    // Plotly merges duplicate category labels into one row, so a non-unique label column gets
+    // the row number appended.
+    const labelColumn = sheet.identifierColumns[0] ?? sheet.columns.find((column) => !valueColumns.includes(column))
+    const shownRows = totalRows > 200 ? sheet.rows.slice(0, 200) : sheet.rows
+    const rawLabels = shownRows.map((row, rowIndex) =>
+      labelColumn && !isMissing(row[labelColumn]) ? getDisplayValue(row[labelColumn]) : String(rowIndex + 1),
+    )
+    const labelsUnique = new Set(rawLabels).size === rawLabels.length
+    const rowLabels = labelsUnique ? rawLabels : rawLabels.map((label, rowIndex) => `${label} · row ${rowIndex + 1}`)
+
+    const presence = shownRows.map((row) => corrColumns.map((column) => (isMissing(row[column]) ? 0 : 1)))
+    const presenceText = presence.map((row) => row.map((value) => (value ? 'present' : 'missing')))
+
+    const plotHeight = chartAreaHeight ?? 400
+    const barHeightPx = showGrid ? Math.max(150, plotHeight * 0.3) : plotHeight
+    // Fractions of the figure: the bar block on top, a gap for the note and the grid title, then
+    // the grid filling the rest.
+    const notes: string[] = []
+    if (totalRows > 200 && showGrid) {
+      notes.push(`Showing first 200 of ${totalRows} rows — column counts above use all rows`)
+    }
+    if (!showGrid) {
+      notes.push('Add a comparison column to see the row-level presence grid.')
+    }
+    // Pixel budget between the two subplots: ~64px for the bar axis ticks and "% missing" title,
+    // 18px per note line, then ~52px for the grid title above its top-side column labels.
+    const px = (value: number) => value / plotHeight
+    const barDomainStart = showGrid ? 1 - barHeightPx / plotHeight : 0
+    const gridDomainEnd = Math.max(0.05, barDomainStart - px(64 + notes.length * 18 + 52))
+
+    const titleAnnotation = (text: string, y: number) => ({
+      text: `<b>${text}</b>`,
+      xref: 'paper' as const,
+      yref: 'paper' as const,
+      x: 0,
+      y,
+      xanchor: 'left' as const,
+      yanchor: 'bottom' as const,
+      showarrow: false,
+      font: { size: 12, color: chartColors.text },
+    })
+
+    return (
+      <section className="panel chart-panel">
+        {renderChartHeader(corrColumns)}
+        <div className="chart-toolbar">
+          <div className="chart-tip">
+            Missing = blank in the original file. Cells blanked during cleaning are not counted.
+          </div>
+          <div className="chart-actions">{renderExportControl(corrColumns)}</div>
+        </div>
+        <div className="chart-plot-area" ref={chartAreaRef}>
+        <Plot
+          ref={graphDivRef}
+          data={[
+            {
+              type: 'bar' as const,
+              orientation: 'h' as const,
+              x: missingPct,
+              y: corrColumns,
+              xaxis: 'x',
+              yaxis: 'y',
+              marker: { color: barColors },
+              text: missingCounts.map((count) => `${count} / ${totalRows} missing`),
+              textposition: 'outside' as const,
+              cliponaxis: false,
+              hovertemplate: '%{y}: %{x:.1f}% missing (%{text})<extra></extra>',
+            },
+            ...(showGrid
+              ? [
+                  {
+                    type: 'heatmap' as const,
+                    x: corrColumns,
+                    y: rowLabels,
+                    z: presence,
+                    zmin: 0,
+                    zmax: 1,
+                    xaxis: 'x2',
+                    yaxis: 'y2',
+                    colorscale: [
+                      [0, '#e63946'],
+                      [1, '#4575b4'],
+                    ],
+                    customdata: presenceText,
+                    hovertemplate: '%{y}<br>%{x}<br>%{customdata}<extra></extra>',
+                    showscale: false,
+                    xgap: 1,
+                    ygap: shownRows.length <= 60 ? 1 : 0,
+                  },
+                ]
+              : []),
+          ]}
+          layout={{
+            autosize: true,
+            height: plotHeight,
+            // Primary-only view puts its note below the plot, so it needs a taller bottom margin.
+            margin: { t: 28, r: 90, b: showGrid ? 40 : 100, l: 100 },
+            font: { color: chartColors.text, size: 11 },
+            showlegend: false,
+            xaxis: {
+              title: { text: '% missing' },
+              range: [0, 100],
+              anchor: 'y',
+              gridcolor: chartColors.grid,
+              zeroline: false,
+            },
+            yaxis: {
+              domain: [barDomainStart, 1],
+              autorange: 'reversed' as const,
+              automargin: true,
+            },
+            xaxis2: { anchor: 'y2', side: 'top', automargin: true },
+            yaxis2: {
+              domain: [0, gridDomainEnd],
+              type: 'category' as const,
+              autorange: 'reversed' as const,
+              automargin: true,
+            },
+            annotations: [
+              titleAnnotation('Missing values per column', 1),
+              ...(showGrid ? [titleAnnotation('Row-level presence / absence', gridDomainEnd + px(30))] : []),
+              ...notes.map((text, index) => ({
+                text,
+                xref: 'paper' as const,
+                yref: 'paper' as const,
+                x: 0,
+                y: showGrid ? barDomainStart - px(64 + index * 18) : -px(64 + index * 18),
+                xanchor: 'left' as const,
+                yanchor: 'top' as const,
+                showarrow: false,
+                font: { size: 11, color: chartColors.text },
+              })),
+            ],
             paper_bgcolor: chartColors.paper,
             plot_bgcolor: chartColors.plot,
           }}
