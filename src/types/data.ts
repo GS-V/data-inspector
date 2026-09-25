@@ -107,6 +107,7 @@ export type PlotType =
   | 'density'
   | 'cdf'
   | 'violin'
+  | 'correlation'
 
 export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
   { value: 'table', label: 'Table' },
@@ -117,6 +118,7 @@ export const PLOT_TYPE_OPTIONS: { value: PlotType; label: string }[] = [
   { value: 'qq', label: 'Q-Q plot' },
   { value: 'density', label: 'Density plot (KDE)' },
   { value: 'cdf', label: 'Cumulative distribution' },
+  { value: 'correlation', label: 'Correlation' },
 ]
 
 export type TransformationType = 'log' | 'log10' | 'sqrt' | 'boxcox' | 'zscore'

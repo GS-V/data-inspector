@@ -26,6 +26,9 @@ import { calculateSkewness, computeSparkbucket, runNormalityTest, transformValue
 import { exportSession } from '../utils/sessionIO'
 import { generatePythonScript as genPy, generateRScript as genR } from '../utils/generateScript'
 
+// Shared with InspectorControls, which disables picker rows once the cap is reached.
+export const MAX_COMPARISON_COLUMNS = 10
+
 type CellChange = {
   cellId: CellId
   nextState?: CellState
@@ -438,7 +441,7 @@ export const useDataInspectorStore = create<DataInspectorState>((set, get) => {
         columnName === selectedColumn ||
         columnName === xAxis ||
         comparisonColumns.includes(columnName) ||
-        comparisonColumns.length >= 4 ||
+        comparisonColumns.length >= MAX_COMPARISON_COLUMNS ||
         (sheet && isDateCol(columnName, sheet.rows))
       ) {
         return
