@@ -3167,14 +3167,9 @@ button {
 /* ── Compare columns dropdown (chart overlay picker) ───────────────── */
 
 .compare-columns-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 9px;
 }
 
 .compare-columns-row-label {
-  flex-shrink: 0;
   color: var(--muted-text);
   font-size: 12px;
   font-weight: 700;
@@ -3255,6 +3250,49 @@ button {
   font-weight: 800;
   color: var(--strong-text);
   letter-spacing: 0.01em;
+}
+
+/* ── Correlation heatmap ────────────────────────────────────────────── */
+
+.chart-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  color: var(--muted-text);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Method toggle bar above the correlation heatmap */
+.corr-method-bar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0 6px;
+}
+
+.corr-method-bar button {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: var(--panel-bg);
+  color: var(--muted-text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.corr-method-bar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.corr-method-bar .code-lang-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent-text);
 }
 
 /* ── Chart export popover ───────────────────────────────────────────── */

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
-import { useDataInspectorStore } from '../store/useDataInspectorStore'
+import { MAX_COMPARISON_COLUMNS, useDataInspectorStore } from '../store/useDataInspectorStore'
 import type { PlotType } from '../types/data'
 import { PLOT_TYPE_OPTIONS, ROW_ORDER_AXIS } from '../types/data'
 import { findValueColumns } from '../utils/numeric'
 import { COMPARISON_COLOR_PALETTE } from '../utils/chartData'
-
-const COMPARISON_COLUMN_CAP = 4
 
 type PanelPosition = { top: number; left: number; width: number }
 
@@ -79,7 +77,7 @@ export function InspectorControls() {
   const valueColumns = findValueColumns(sheet?.rows ?? [], sheet?.columns ?? [])
   const sheetOptions = workbook?.sheets ?? []
   const compareCandidates = valueColumns.filter((column) => column !== selectedColumn && column !== xAxis)
-  const isAtCap = comparisonColumns.length >= COMPARISON_COLUMN_CAP
+  const isAtCap = comparisonColumns.length >= MAX_COMPARISON_COLUMNS
 
   return (
     <section className="panel controls-panel">
@@ -118,19 +116,21 @@ export function InspectorControls() {
             </select>
           </label>
 
-          <label className="field">
-            <span>X-axis</span>
-            <select value={xAxis} onChange={(event) => setXAxis(event.target.value)} disabled={!sheet}>
-              <option value={ROW_ORDER_AXIS}>Row order</option>
-              {allColumns.map((column) => (
-                <option key={column} value={column}>
-                  {column}
-                </option>
-              ))}
-            </select>
-          </label>
+          {plotType !== 'correlation' && (
+            <label className="field">
+              <span>X-axis</span>
+              <select value={xAxis} onChange={(event) => setXAxis(event.target.value)} disabled={!sheet}>
+                <option value={ROW_ORDER_AXIS}>Row order</option>
+                {allColumns.map((column) => (
+                  <option key={column} value={column}>
+                    {column}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-          <div className="compare-columns-row">
+          <div className="compare-columns-row field">
             <span className="compare-columns-row-label">Compare:</span>
             <div className="compare-columns-dropdown" ref={toggleRef}>
               <button
@@ -191,6 +191,23 @@ export function InspectorControls() {
                 : null}
             </div>
           </div>
+
+          {plotType === 'correlation' && comparisonColumns.length === 0 && (
+            <p className="hint">Add at least one comparison column to build the matrix.</p>
+          )}
+
+          {/* The X-axis selector is hidden here, and the store keeps the X-axis column out of the
+              comparison picker, so say why it is missing. */}
+          {plotType === 'correlation' &&
+            xAxis !== ROW_ORDER_AXIS &&
+            xAxis !== selectedColumn &&
+            !comparisonColumns.includes(xAxis) &&
+            valueColumns.includes(xAxis) && (
+              <p className="hint">
+                &quot;{xAxis}&quot; is your current X-axis and is excluded from the comparison picker. Switch to
+                Scatter to change the X-axis first.
+              </p>
+            )}
         </>
       )}
 
@@ -205,7 +222,13 @@ export function InspectorControls() {
         </select>
       </label>
 
-      <p className="hint">Scatter lets you click or drag-select values. Other chart types show the selected column’s distribution.</p>
+      <p className="hint">
+        {plotType === 'scatter'
+          ? 'Scatter lets you click or drag-select values. Other chart types show the selected column’s distribution.'
+          : plotType === 'correlation'
+            ? 'Shows pairwise correlation across the primary and all comparison columns. Pearson assumes linearity; Spearman and Kendall are rank-based and robust to outliers.'
+            : 'Other chart types show the selected column’s distribution.'}
+      </p>
 
       {sheet && valueColumns.length === 0 ? (
         <p className="hint">No numeric columns were found in this sheet.</p>

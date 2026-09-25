@@ -14,9 +14,15 @@ export type VisibleColumnValue = {
   value: number
 }
 
-// Okabe-Ito colorblind-safe palette, used in order for comparison-column overlays (chart only).
+// Comparison-column overlay colours, used in order (chart only). One slot per column up to
+// MAX_COMPARISON_COLUMNS. Slots 1-4 are Okabe-Ito colorblind-safe. Slots 5-10 clear 3:1 on the
+// dark-mode plot background and 2.5:1 on white, and sit at least ~12 CIEDE2000 from every other
+// slot and every cell-mark colour, so an overlay series never reads as a marked cell.
 // Deliberately excludes #56B4E9 (sky blue) -- too close to the app's primary accent blue.
-export const COMPARISON_COLOR_PALETTE = ['#E69F00', '#009E73', '#CC79A7', '#D55E00']
+export const COMPARISON_COLOR_PALETTE = [
+  '#E69F00', '#009E73', '#CC79A7', '#D55E00', // slots 1-4 -- unchanged
+  '#78723A', '#3A7278', '#A0726A', '#7B5EA7', '#BB1B7B', '#9AA630',
+]
 
 /**
  * Return the plottable numeric values of a column, each paired with its row index and cell key.

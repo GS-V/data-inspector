@@ -19,7 +19,7 @@ import {
   type VisibleColumnValue,
 } from '../utils/chartData'
 import { getDisplayValue, getEffectiveValue, isDateCol, toNumber } from '../utils/numeric'
-import { formatNumber } from '../utils/stats'
+import { buildCorrelationMatrix, formatNumber } from '../utils/stats'
 
 type PlotPointEvent = {
   points?: Array<{
@@ -195,6 +195,9 @@ export function InspectorChart({ theme }: InspectorChartProps) {
   const [exportHeight, setExportHeight] = useState('500')
   const [exportFormat, setExportFormat] = useState<'png' | 'svg'>('png')
   const [exportError, setExportError] = useState<string | null>(null)
+  // Correlation method -- transient view state, like the Lines toggle. Declared up here with the
+  // other hooks because the component returns early below.
+  const [corrMethod, setCorrMethod] = useState<'pearson' | 'spearman' | 'kendall'>('pearson')
 
   const [lastObservedPlotType, setLastObservedPlotType] = useState(plotType)
   if (plotType !== lastObservedPlotType) {
@@ -672,6 +675,130 @@ export function InspectorChart({ theme }: InspectorChartProps) {
             }
             setEmptySelectionVersion((version) => version + 1)
           }}
+        />
+        </div>
+      </section>
+    )
+  }
+
+  // Correlation heatmap — read-only, no cell selection.
+  // graphDivRef is shared so chart export works without extra wiring.
+  // corrMethod is local state; switching method does not affect
+  // cellState, auditLog, or any other store slice.
+  if (plotType === 'correlation') {
+    // Defensive backstop -- see the matching comment in the histogram branch below.
+    const validComparisonColumns = comparisonColumns.filter((column) => !isDateCol(column, sheet.rows))
+    const corrColumns = [selectedColumn, ...validComparisonColumns]
+
+    if (corrColumns.length < 2) {
+      return (
+        <section className="panel chart-panel">
+          {renderChartHeader(corrColumns)}
+          <div className="chart-empty-state">
+            Select at least one comparison column to show a correlation matrix.
+          </div>
+        </section>
+      )
+    }
+
+    // Values stay aligned by row index so each pair of columns is compared row by row.
+    // getVisibleColumnValues drops rows, so it cannot be used here. The overlay rule is the
+    // same: a blanked cell (valueOverride: null) or a non-numeric value becomes null.
+    const columnValues = corrColumns.map((name) => ({
+      name,
+      values: sheet.rows.map((row, rowIndex) => {
+        const state = cellState[makeCellId(sheet.name, rowIndex, name)]
+        if (state?.valueOverride === null) {
+          return null
+        }
+        return toNumber(getEffectiveValue(row[name], state))
+      }),
+    }))
+    // Kendall is O(n²) per column pair and can freeze the page on large sheets. The largest
+    // non-null count is an upper bound on any pair's paired rows.
+    const maxPairedRows = Math.max(0, ...columnValues.map((c) => c.values.filter((v) => v != null).length))
+    const kendallDisabled = maxPairedRows > 3000
+    // Derived during render rather than reset in an effect: an effect runs after render, so the
+    // expensive Kendall matrix would already have been computed once. corrMethod keeps 'kendall',
+    // so a smaller sheet switches back to it on its own.
+    const activeCorrMethod = kendallDisabled && corrMethod === 'kendall' ? 'spearman' : corrMethod
+    const { labels, matrix } = buildCorrelationMatrix(columnValues, activeCorrMethod)
+    const methodLabel =
+      activeCorrMethod === 'pearson' ? 'Pearson r' : activeCorrMethod === 'spearman' ? 'Spearman ρ' : 'Kendall τ-b'
+
+    return (
+      <section className="panel chart-panel">
+        {renderChartHeader(corrColumns)}
+        <div className="chart-toolbar">
+          <div className="corr-method-bar">
+            <button
+              type="button"
+              className={activeCorrMethod === 'pearson' ? 'code-lang-active' : undefined}
+              onClick={() => setCorrMethod('pearson')}
+            >
+              Pearson
+            </button>
+            <button
+              type="button"
+              className={activeCorrMethod === 'spearman' ? 'code-lang-active' : undefined}
+              onClick={() => setCorrMethod('spearman')}
+            >
+              Spearman
+            </button>
+            <button
+              type="button"
+              className={activeCorrMethod === 'kendall' ? 'code-lang-active' : undefined}
+              onClick={() => setCorrMethod('kendall')}
+              disabled={kendallDisabled}
+              title={
+                kendallDisabled
+                  ? `Kendall is disabled above 3 000 paired rows (this sheet has ${maxPairedRows}). Use Spearman instead.`
+                  : undefined
+              }
+            >
+              Kendall
+            </button>
+          </div>
+          <div className="chart-actions">{renderExportControl(corrColumns)}</div>
+        </div>
+        <div className="chart-plot-area" ref={chartAreaRef}>
+        <Plot
+          ref={graphDivRef}
+          data={[
+            {
+              type: 'heatmap' as const,
+              x: labels,
+              y: labels,
+              // NaN (too few paired values) becomes null, which Plotly draws as an empty gap.
+              z: matrix.map((row) => row.map((value) => (Number.isNaN(value) ? null : value))),
+              zmin: -1,
+              zmax: 1,
+              colorscale: [
+                [0, '#e8736b'],
+                [0.5, '#ffffff'],
+                [1, '#7fa3d6'],
+              ],
+              text: matrix.map((row) => row.map((value) => (Number.isNaN(value) ? 'N/A' : value.toFixed(2)))),
+              texttemplate: '%{text}',
+              textfont: { color: '#222222' },
+              hovertemplate: `%{y} × %{x}<br>${methodLabel}: %{text}<extra></extra>`,
+              showscale: true,
+              colorbar: { thickness: 14, len: 0.8 },
+            },
+          ]}
+          layout={{
+            autosize: true,
+            height: chartAreaHeight ?? 400,
+            margin: { t: 20, r: 80, b: 100, l: 100 },
+            font: { color: chartColors.text, size: 11 },
+            xaxis: { side: 'bottom', tickangle: -35, automargin: true },
+            yaxis: { autorange: 'reversed' as const, automargin: true },
+            paper_bgcolor: chartColors.paper,
+            plot_bgcolor: chartColors.plot,
+          }}
+          config={{ displaylogo: false, displayModeBar: false, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler
         />
         </div>
       </section>
