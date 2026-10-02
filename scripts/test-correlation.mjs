@@ -17,6 +17,10 @@ const {
   correlationPValue,
   correlationCI,
   kendallPValue,
+  chiSquaredSurvival,
+  kruskalWallis,
+  dunnTest,
+  aggregateSeries,
 } = await import(
   `data:text/javascript,${encodeURIComponent(js)}`
 )
@@ -160,6 +164,57 @@ assert(sp.p === correlationPValue(sp.r, 10), true, 0, 'matrix: spearman cell p =
 const kc = buildCorrelationMatrix([{ name: 'x', values: sx }, { name: 'y', values: sy }], 'kendall').statsMatrix[0][1]
 assert(Number.isNaN(kc.ciLow) && kc.p === kendallPValue(kc.r, 10), true, 0, 'matrix: kendall cell has no CI, kendall p')
 
+// ─── chiSquaredSurvival ─────────────────────────────────────────────────────
+// References: scipy.stats.chi2.sf. (The request quoted H = 6.489 / p = 0.0389 for the KW case
+// below; the correct values are H = 7.2 / p = 0.027324 -- 0.0389 is chi2.sf(6.489, 2).)
+assert(chiSquaredSurvival(0, 2), 1.0, 1e-10, 'chi2: h=0 df=2 → p=1')
+assert(chiSquaredSurvival(6.489, 2), 0.038988, 1e-6, 'chi2: h=6.489 df=2')
+assert(chiSquaredSurvival(7.2, 2), 0.027324, 1e-6, 'chi2: h=7.2 df=2')
+assert(chiSquaredSurvival(100, 4), 9.8366e-21, 1e-24, 'chi2: h=100 df=4 → 9.84e-21 (not 0)')
+assert(Number.isNaN(chiSquaredSurvival(NaN, 2)), true, 0, 'chi2: NaN h → NaN')
+assert(Number.isNaN(chiSquaredSurvival(1, 0)), true, 0, 'chi2: df=0 → NaN')
+
+// ─── kruskalWallis ──────────────────────────────────────────────────────────
+// Reference: scipy.stats.kruskal([1,2,3],[4,5,6],[7,8,9]) → H = 7.2, p = 0.027324.
+const kwGroups = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+const kw3 = kruskalWallis(kwGroups)
+assert(kw3.H, 7.2, 1e-10, 'kw: H for 3 clean groups')
+assert(kw3.df, 2, 0, 'kw: df = k-1')
+assert(kw3.p, 0.027324, 1e-6, 'kw: p matches scipy.stats.kruskal')
+// scipy: kruskal([1,1,2,2,3],[2,3,3,4,4,4],[5,5,5,6],[1,6,6,7,7,7,8]) → H = 12.835972, p = 0.005005
+const kwTies = kruskalWallis([[1, 1, 2, 2, 3], [2, 3, 3, 4, 4, 4], [5, 5, 5, 6], [1, 6, 6, 7, 7, 7, 8]])
+assert(kwTies.H, 12.835972, 1e-6, 'kw: tie-corrected H (heavy ties)')
+assert(kwTies.p, 0.0050051, 1e-6, 'kw: tie-corrected p (heavy ties)')
+const kwTied = kruskalWallis([[5, 5, 5], [5, 5, 5]])
+assert(Number.isNaN(kwTied.H) && Number.isNaN(kwTied.p), true, 0, 'kw: all identical → NaN (as scipy)')
+const kwBad = kruskalWallis([[1, 2, 3]])
+assert(Number.isNaN(kwBad.H), true, 0, 'kw: k<2 → H=NaN')
+assert(Number.isNaN(kwBad.p), true, 0, 'kw: k<2 → p=NaN')
+
+// ─── dunnTest ───────────────────────────────────────────────────────────────
+// Formula: mean ranks 2, 5, 8; N = 9; varBase = 9·10/12 = 7.5; sigma = sqrt(7.5·(1/3+1/3)) = sqrt(5).
+// A vs B: z = -3/sqrt(5) = -1.341641, p = 0.179712, pAdj = 0.539137.
+// A vs C: z = -6/sqrt(5) = -2.683282, pAdj = 0.021871.
+const dunn3 = dunnTest(kwGroups, ['A', 'B', 'C'])
+assert(dunn3.length, 3, 0, 'dunn: 3 groups → 3 pairs')
+assert(dunn3[0].groupA === 'A' && dunn3[0].groupB === 'B', true, 0, 'dunn: pair order A-B, A-C, B-C')
+assert(dunn3[0].z, -1.341641, 1e-6, 'dunn: z for A vs B')
+assert(dunn3[0].pAdj, 0.539137, 1e-5, 'dunn: pAdj for A vs B (Bonferroni × 3)')
+assert(dunn3[1].z, -2.683282, 1e-6, 'dunn: z for A vs C')
+assert(dunn3[1].pAdj, 0.021871, 1e-5, 'dunn: pAdj for A vs C')
+assert(dunnTest([[1]], ['A']).length, 0, 0, 'dunn: k<2 → empty')
+
+// ─── aggregateSeries ────────────────────────────────────────────────────────
+const agg = aggregateSeries([{ x: 2, y: 30 }, { x: 1, y: 10 }, { x: 1, y: 20 }])
+assert(agg.length, 2, 0, 'aggregateSeries: 2 unique x values')
+assert(agg[0].x, 1, 0, 'aggregateSeries: sorted, x=1 first')
+assert(agg[0].mean, 15, 1e-10, 'aggregateSeries: mean of [10,20] = 15')
+assert(agg[0].se, 5, 1e-10, 'aggregateSeries: SE = sd/sqrt(n) = 7.071/1.414 = 5')
+assert(agg[0].n, 2, 0, 'aggregateSeries: n=2 for x=1')
+assert(agg[1].se, 0, 0, 'aggregateSeries: SE=0 when n=1')
+const aggMixed = aggregateSeries([{ x: 'T10', y: 1 }, { x: 'T2', y: 1 }, { x: 3, y: 1 }])
+assert(aggMixed.map((p) => p.x).join(',') === '3,T2,T10', true, 0, 'aggregateSeries: numbers first, natural string order')
+
 const statPass = statCases.filter(Boolean).length
-console.log(`\np-value / CI functions: ${statPass}/${statCases.length} passed`)
+console.log(`\nstat functions (p-values, CIs, KW, Dunn, series): ${statPass}/${statCases.length} passed`)
 process.exitCode = scipyPass === cases.length && statPass === statCases.length ? 0 : 1
